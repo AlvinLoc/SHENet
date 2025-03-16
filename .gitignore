@@ -1,0 +1,20 @@
+.vscode/
+data/
+third-party/
+pretrained_models/
+
+# 忽略所有 __pycache__ 目录
+__pycache__/*
+model/__pycache__/*
+datasets/__pycache__/*
+utils/__pycache__/*
+# 忽略所有 .pyc 文件
+*.pyc
+# 忽略所有 .pyo 文件
+*.pyo
+# 忽略所有 .pyd 文件
+*.pyd
+# 忽略所有 .so 文件
+*.so
+# 忽略所有 .c 文件 (如果你使用 Cython)
+*.c
