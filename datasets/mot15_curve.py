@@ -152,6 +152,7 @@ class MOT(Dataset):
             data_numpy = cv2.cvtColor(data_numpy, cv2.COLOR_BGR2RGB)
             data_numpy = cv2.resize(data_numpy,(self.image_size[0],self.image_size[1]),interpolation=cv2.INTER_AREA)
             raw_img = self.transform(data_numpy)
+
         if self.use_rough_data:
             # input root data from the timestep input-1, input-1 as the origin point
             root = root[:self.in_n+self.out_n]

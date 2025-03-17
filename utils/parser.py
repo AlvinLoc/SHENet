@@ -49,6 +49,9 @@ parser.add_argument('--clip_grad',type=float,default=10000,help= 'select max nor
 # FFNet/MOT15/checkpoints/
 parser.add_argument('--model_path',type=str,default='./output/',help= 'directory with the models checkpoints ')
 
+# alvin
+parser.add_argument('--save_trajectories', type=bool, default=False, help='save trajectories')
+
 
 
 

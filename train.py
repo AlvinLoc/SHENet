@@ -16,6 +16,7 @@ from model.SHENet import SHENet
 from utils.loss_funcs import CurveLoss
 from utils.data_utils import define_actions
 from utils.parser import args
+from tqdm import tqdm
 import pudb
 
 
@@ -38,8 +39,8 @@ device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 print('Using device: %s'%device)
 
 model = SHENet(args)
+model = model.cuda()
 # model = torch.nn.DataParallel(model, device_ids=[0,1,2]).to(device)
-# model = model.to(device)
 # print(f"model {model}")
 
 print('total number of parameters of the network is: '+str(sum(p.numel() for p in model.parameters() if p.requires_grad)))
@@ -81,8 +82,8 @@ def train():
     # print("static memory size (before): ",len(static_memory))
 
     # 定义参数
-    n_modes = 5
-    n_timesteps = 10
+    n_modes = 4
+    n_timesteps = 60
     state_dim = 2
 
     # 构造 memory 数组
@@ -95,7 +96,12 @@ def train():
         n=0
         model.train()
 
-        for cnt,(input_root,target,scale,meta,raw_img) in enumerate(data_loader):
+        all_trajs = []
+        for cnt,(input_root,target,scale,meta,raw_img) in tqdm(enumerate(data_loader)):
+            if args.save_trajectories:
+                trajs = [input_root[i].cpu().numpy() for i in range(input_root.shape[0])]
+                all_trajs.extend(trajs)
+                continue
             batch_dim=input_root.shape[0]
             n+=batch_dim
             input_root = input_root.float().cuda()
@@ -119,6 +125,10 @@ def train():
 
             running_loss += loss*batch_dim
 
+        
+        # traj_to_save = [{"root": i} for i in all_trajs]
+        # torch.save(traj_to_save, "./trajs.pt")
+        # exit(0)
         train_loss.append(running_loss.detach().cpu()/n)  
         model.eval()
 

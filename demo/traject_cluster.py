@@ -8,10 +8,12 @@ import sys
 import torch
 sys.path.insert(0,"./")
 from utils.cluster_function import DistMatricesSection,OdClustering,OdMajorClusters,evaluate_trajectory,clusterPlot,Silhouette
-
+import pickle
+import pudb
 
 def load_data():
-    file_path = "./data/rough_trajectories.pt"
+    # file_path = "./data/rough_trajectories.pt"
+    file_path = "./data/trajs.pt"
     data = torch.load(file_path)
     root = []
     for sample in data:
@@ -35,8 +37,9 @@ def vis_goal(trajectory):
     plt.scatter(goal_x,goal_y)
     plt.savefig("goal.jpg")
 
-def evaluate():
-    file = open("./../data/mot15distMatrices.pickle", 'rb')
+def evaluate(trajectories):
+    # file = open("./../data/mot15distMatrices.pickle", 'rb')
+    file = open("./output/mot15/distances/distMatrices.pickle", 'rb')
     distMatrices = pickle.load(file)
 
     nClusDestSet = [4]
@@ -44,18 +47,19 @@ def evaluate():
                                                   shuffle=False, nIter=1, visualize=False)
 
     startLabels = np.ones(537)
+    # startLabels = np.ones(endLabels.shape[0])
     nClusStart = 1
     refTrajIndices, odTrajLabels = OdMajorClusters(trajectories=trajectories, startLabels=startLabels,
                                                    endLabels=endLabels, threshold=10, visualize=True, test=True,
                                                    load=False)
 
     clusRange, nIter, test = list(range(2, 30)), 3, False
-    evalMeasures, tableResults = evaluate_trajectory(clusRange=clusRange, nIter=nIter, test=test,
-                                                     distMatrices=distMatrices,
-                                                     trajectories=trajectories, odTrajLabels=odTrajLabels,
-                                                     refTrajIndices=refTrajIndices, nClusStart=nClusStart,
-                                                     nClusEnd=nClusEnd,
-                                                     modelList=None, dataName="mot15")
+    # evalMeasures, tableResults = evaluate_trajectory(clusRange=clusRange, nIter=nIter, test=test,
+    #                                                  distMatrices=distMatrices,
+    #                                                  trajectories=trajectories, odTrajLabels=odTrajLabels,
+    #                                                  refTrajIndices=refTrajIndices, nClusStart=nClusStart,
+    #                                                  nClusEnd=nClusEnd,
+    #                                                  modelList=None, dataName="mot15")
 
 def plot(trajectories):
     file_path = "./"
@@ -63,6 +67,7 @@ def plot(trajectories):
     distMatrices = pickle.load(file)
     for (distMatrix, f) in distMatrices:
         if f == "mot15_DtwMatrix_param-1":
+            print(f"calculating {f}")
             model = AgglomerativeClustering(affinity='precomputed', linkage='average')
             model.n_clusters = 28
             S, closestCluster, labels, subDistMatrix, shufSubDistMatrix = Silhouette(model=model,
@@ -74,24 +79,25 @@ def plot(trajectories):
 def d_cluster():
     distMatrices = DistMatricesSection(trajectories=trajectories,test=False)
 
-    # _,_,_ = OdClustering(funcTrajectories=trajectories, shuffle=True, nIter=10,nClusDestSet=[i for i in range(1, 30)], visualize=False)
+    # # _,_,_ = OdClustering(funcTrajectories=trajectories, shuffle=True, nIter=10,nClusDestSet=[i for i in range(1, 30)], visualize=False)
 
     # nClusDestSet = [4]
     # # modelNames=['KMedoids','KMeans','average Agglo-Hierarch','ward Agglo-Hierarch','BIRCH','GMM']
     # modelNames = ['average Agglo-Hierarch']
     # endLabels, endPoints, nClusEnd = OdClustering(funcTrajectories=trajectories, nClusDestSet=nClusDestSet,
     #                                               modelNames=modelNames, shuffle=False, nIter=1, visualize=True)
-    #
-    # startLabels = np.ones(537)
+    
+    # startLabels = np.ones(endLabels.shape[0])
     # refTrajIndices, odTrajLabels = OdMajorClusters(trajectories=trajectories, startLabels=startLabels,
     #                                                endLabels=endLabels, threshold=10, visualize=True, test=True,
     #                                                load=False)
 
 if __name__ == '__main__':
+    # import pudb; pu.db
     trajectories = load_data()
-    # vis_trajectory(trajectories)
+    vis_trajectory(trajectories)
 
-    # d_cluster()
-    # evaluate(trajectories)
-    # plot(trajectories)
+    d_cluster()
+    evaluate(trajectories)
+    plot(trajectories)
 

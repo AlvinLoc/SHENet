@@ -6,7 +6,8 @@ import torch.nn as nn
 import torch.nn.functional as F
 import mmcv
 from mmseg.models import build_segmentor
-from mmcv.runner import load_checkpoint
+from mmengine.runner import load_checkpoint
+from mmengine.config import Config
 import sys
 sys.path.insert(0,"./")
 from utils.parser import args
@@ -81,7 +82,7 @@ class SHENet(nn.Module):
         config = opt.vit_config_file
         checkpoint = opt.vit_checkpoint_file
 
-        config = mmcv.Config.fromfile(config)
+        config = Config.fromfile(config)
         config.model.pretrained = None
         config.model.train_cfg = None
 
@@ -143,6 +144,7 @@ class SHENet(nn.Module):
         batch_size,in_seq_len,_ = x_tra.shape
 
         # Project the trajectory features
+        # 1x1卷积调整通道数量，注意1x1卷积要求输入的维度是[N,C_in,L]，并且输出的维度是[N,C_out,L]，所以需要transpose两次的操作
         proj_tra =  self.proj_tra(x_tra.transpose(1,2))
         proj_tra = proj_tra.transpose(1,2)  # (N,T,D)
 

@@ -13,7 +13,11 @@ import traj_dist, traj_dist.distance
 import torch
 
 import sklearn, sklearn.mixture
+from tqdm import tqdm
 from sklearn.cluster import KMeans, AgglomerativeClustering, Birch, SpectralClustering, OPTICS, DBSCAN
+from concurrent.futures import ThreadPoolExecutor
+import threading
+
 # import sklearn_extra
 # import sklearn_extra.cluster
 
@@ -58,6 +62,57 @@ class DistFuncs():
         return traj_dist.distance.c_e_sspd(X, Y)
 
 
+import numpy as np
+from tqdm import tqdm
+from concurrent.futures import ThreadPoolExecutor
+import threading
+
+def compute_distance(args):
+    """计算两条轨迹间的距离"""
+    i, j, trajectories, method, LMatrix, paramValue = args
+    tr1 = trajectories[i]
+    tr2 = trajectories[j]
+    return i, j, method(tr1, tr2, LMatrix, paramValue)
+
+def parallel_distance_computation(trajectories, method, LMatrix, paramValue, n_threads=30):
+    """使用多线程计算距离矩阵"""
+    nTraj = len(trajectories)
+    distMatrix = np.zeros((nTraj, nTraj))
+    
+    # 创建任务列表
+    tasks = []
+    for i in range(nTraj):
+        for j in range(i + 1):  # 只计算下三角矩阵
+            tasks.append((i, j, trajectories, method, LMatrix, paramValue))
+    
+    # 使用线程锁确保进度条更新的线程安全
+    lock = threading.Lock()
+    completed = 0
+    total = len(tasks)
+    
+    # 创建进度条
+    pbar = tqdm(total=total, desc="计算距离矩阵")
+    
+    def process_result(future):
+        nonlocal completed
+        i, j, distance = future.result()
+        distMatrix[i, j] = distance
+        distMatrix[j, i] = distance  # 对称矩阵
+        with lock:
+            completed += 1
+            pbar.update(1)
+    
+    # 使用线程池执行任务
+    with ThreadPoolExecutor(max_workers=n_threads) as executor:
+        futures = []
+        for task in tasks:
+            future = executor.submit(compute_distance, task)
+            future.add_done_callback(process_result)
+            futures.append(future)
+    
+    pbar.close()
+    return distMatrix
+
 def DistMatricesSection(trajectories=None, nTraj=None, dataName="mot15", pickleInDistMatrix=False, test=True,
                         maxTrajLength=1800,
                         similarityMeasure=None,
@@ -84,21 +139,27 @@ def DistMatricesSection(trajectories=None, nTraj=None, dataName="mot15", pickleI
 
     if nTraj is None:
         nTraj = len(trajectories)
+    # import pudb;pu.db
 
     if pickleInDistMatrix:
         shCommand("wget -O {}/data/distMatricesZip.zip".format(file_path))
-        shCommand("rm -r -d {}/data/distMatricesFolder".format(file_path))
+        # shCommand("rm -r -d {}/data/distMatricesFolder".format(file_path))
         shCommand("unzip -o {}/data/distMatricesZip.zip".format(file_path))
 
     else:
-        shCommand("rm -d -r {}/data/distMatricesFolder".format(file_path))
-        shCommand("mkdir {}/data/distMatricesFolder".format(file_path))
+        # shCommand("rm -d -r {}/data/distMatricesFolder".format(file_path))
+        # shCommand("mkdir {}/data/distMatricesFolder".format(file_path))
+        os.makedirs(f"{file_path}/data/distMatricesFolder", exist_ok=True)
         distMatrices = []
         LZero = np.zeros((maxTrajLength + 1, maxTrajLength + 1))  ######################
         LInf = np.full((maxTrajLength + 1, maxTrajLength + 1), 1e6)
         distFuncs = DistFuncs()
         # testTraj0 = np.array([[0,0],[0,1]], dtype=float)
         # testTraj1 = np.array([[0.75,0],[0.5,1],[1,1.5],[0.75,2.5]], dtype=float)
+
+        pkl_path = "./output/mot15/distances/distMatrices.pickle"
+        if os.path.exists(pkl_path):
+            return
 
         for (methodName, method) in inspect.getmembers(distFuncs):
             # try:
@@ -110,26 +171,42 @@ def DistMatricesSection(trajectories=None, nTraj=None, dataName="mot15", pickleI
                     else:
                         LMatrix = LZero.copy()
                     for paramValue in paramValueList:
-                        distMatrix = np.zeros((nTraj, nTraj))
-                        startTime = Time(prnt=False)
-                        for i in range(nTraj):
-                            for j in range(i + 1):
-                                tr1 = trajectories[i]
-                                tr2 = trajectories[j]
-                                distMatrix[i, j] = method(tr1, tr2, LMatrix, paramValue)
-                                distMatrix[j, i] = distMatrix[i, j]
+                        csv_path = f"{file_path}/data/distMatricesFolder/{dataName}_{distName}Matrix_param{paramValue}.csv"
+                        if os.path.exists(csv_path):
+                            distMatrix = loadtxt(csv_path, delimiter=',')
+                            assert (distMatrix.shape == (nTraj, nTraj)), f"distMatrix.shape={distMatrix.shape}, nTraj={nTraj}"
+                            print(f"Good to go, {csv_path} loaded !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
+                            print(f'{distName}, paramValue={paramValue}, loaded from csv')
+                        else:
+                            distMatrix = np.zeros((nTraj, nTraj))
+                            startTime = Time(prnt=False)
+                            # for i in tqdm(range(nTraj)):
+                            #     for j in range(i + 1):
+                            #         tr1 = trajectories[i]
+                            #         tr2 = trajectories[j]
+                            #         distMatrix[i, j] = method(tr1, tr2, LMatrix, paramValue)
+                            #         distMatrix[j, i] = distMatrix[i, j]
 
-                        endTime = Time(prnt=False)
-                        print(f'{distName}, paramValue={paramValue}, runtime:{str(endTime - startTime)}')
-            
-                        savetxt(f"{file_path}/data/distMatricesFolder/{dataName}_{distName}Matrix_param{paramValue}.csv",
-                                distMatrix, delimiter=',')
+                            # 创建任务列表
+                            distMatrix = parallel_distance_computation(trajectories, method, LMatrix, paramValue)
+                            assert (distMatrix.shape == (nTraj, nTraj)), f"distMatrix.shape={distMatrix.shape}, nTraj={nTraj}"
+                            assert distMatrix.max() > 0.0001, f"distMatrix.max()={distMatrix.max()}"
+                            
+                            endTime = Time(prnt=False)
+                            print(f'{distName}, paramValue={paramValue}, runtime:{str(endTime - startTime)}')
+                
+                            savetxt(f"{file_path}/data/distMatricesFolder/{dataName}_{distName}Matrix_param{paramValue}.csv",
+                                    distMatrix, delimiter=',')
                         distMatrices.append((distMatrix, f"{dataName}_{distName}Matrix_param{paramValue}"))
-    
-    if not test:
-        pickle_out = open(f'{file_path}/mot15/distances/distMatrices.pickle', "wb")
-        pickle.dump(distMatrices, pickle_out)
-        pickle_out.close()
+
+        if not test:
+            if not os.path.exists(f'{file_path}/mot15/distances'):
+                os.makedirs(f'{file_path}/mot15/distances')
+            
+            pickle_out = open(f'{file_path}/mot15/distances/distMatrices.pickle', "wb")
+            pickle.dump(distMatrices, pickle_out)
+            pickle_out.close()
+
 
     return distMatrices
 
@@ -253,7 +330,7 @@ def OdClustering(funcTrajectories=None, nTraj=None, dataName="mot15", modelList=
                     plt.scatter(endCenters[:, 0], endCenters[:, 1], c='black')
                     plt.tick_params(colors=tickColors)
 
-                    plt.savefig("./../output/{}.jpg".format(title))
+                    plt.savefig("./output/{}.jpg".format(title))
                     # plt.show()
     #
     # meanStartAvgDist = np.mean(startAvgDists, axis=-1)
@@ -272,7 +349,8 @@ def OdClustering(funcTrajectories=None, nTraj=None, dataName="mot15", modelList=
                      ecolor='blue')
         fig.tick_params(colors=tickColors)
         fig.set_title("Destination clusters")
-        plt.show()
+        # plt.show()
+        plt.savefig("./output/destClusters.jpg")
 
     if not test:
         try:
@@ -358,7 +436,8 @@ def OdMajorClusters(trajectories=None, startLabels=None, endLabels=None, dataNam
                     tr = trajectories[k]
                     fig.plot(tr[:, 0], tr[:, 1])
                     fig.scatter(tr[0, 0], tr[0, 1], c=100, s=2, marker='o')
-        plt.show()
+        # plt.show()
+        plt.savefig("./output/majorODs.jpg")
 
     # if not test:
     #     try:

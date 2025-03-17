@@ -126,7 +126,9 @@ class CurveLoss(nn.Module):
         # for logit, ground_truth in zip(clusters, target):
         for idx in range(batch_size):
             searched_curve = self.search_curve(preds[idx])
-            pred = searched_curve[10:] + preds[idx,10:]
+            pred = preds[idx,10:]
+            if searched_curve.shape[0] > 10:
+                pred = searched_curve[10:] + preds[idx,10:]
             true_preds[idx,10:] = pred
             loss = torch.sqrt(self.criterion(pred,target[idx,10:]))
             # loss use for others without search 

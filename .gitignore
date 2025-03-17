@@ -18,3 +18,8 @@ utils/__pycache__/*
 *.so
 # 忽略所有 .c 文件 (如果你使用 Cython)
 *.c
+
+output/
+output_copy/
+tmp/
+clustered_trajs/
