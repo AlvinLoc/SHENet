@@ -87,7 +87,8 @@ def train():
     state_dim = 2
 
     # 构造 memory 数组
-    static_memory = np.random.randn(n_modes, n_timesteps, state_dim)
+    # static_memory = np.random.randn(n_modes, n_timesteps, state_dim)
+    static_memory = np.zeros((n_modes, n_timesteps, state_dim))
 
     criterion = CurveLoss(static_memory)
 

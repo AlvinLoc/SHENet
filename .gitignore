@@ -23,3 +23,6 @@ output/
 output_copy/
 tmp/
 clustered_trajs/
+
+model/__pycache__/
+utils/__pycache__/
