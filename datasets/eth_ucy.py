@@ -10,20 +10,26 @@ import torch.nn.functional as F
 import math
 import os
 import sys
-sys.path.insert(0,"./")
+
+sys.path.insert(0, "./")
 from utils.parser import args
-from utils.data_utils import get_affine_transform,exec_affine_transform,generate_root_heatmaps,generate_root_distance_maps
-from utils.data_utils import get_bezier_parameters,bezier_curve
+from utils.data_utils import (
+    get_affine_transform,
+    exec_affine_transform,
+    generate_root_heatmaps,
+    generate_root_distance_maps,
+)
+from utils.data_utils import get_bezier_parameters, bezier_curve
 # 26 9 19 27 24 79 24 98 19 7 10
 
 
-def read_file(_path, delim='\t'):
+def read_file(_path, delim="\t"):
     data = []
-    if delim == 'tab':
-        delim = '\t'
-    elif delim == 'space':
-        delim = ' '
-    with open(_path, 'r') as f:
+    if delim == "tab":
+        delim = "\t"
+    elif delim == "space":
+        delim = " "
+    with open(_path, "r") as f:
         for line in f:
             line = line.strip().split(delim)
             line = [float(i) for i in line]
@@ -51,9 +57,18 @@ def poly_fit(traj, traj_len, threshold):
 
 class ETH(Dataset):
     """Dataloder for the Trajectory datasets"""
+
     def __init__(
-        self, opt,seq_name, split=0,obs_len=8, pred_len=12, skip=1, threshold=0.002,
-        min_ped=1, delim='\t'
+        self,
+        opt,
+        seq_name,
+        split=0,
+        obs_len=8,
+        pred_len=12,
+        skip=1,
+        threshold=0.002,
+        min_ped=1,
+        delim="\t",
     ):
         """
         Args:
@@ -68,14 +83,14 @@ class ETH(Dataset):
         - delim: Delimiter in the dataset files
         """
         super(ETH, self).__init__()
-        
+
         self.data_dir = "./data/eth_ucy/datasets"
         if split == 0:
-            self.data_dir = os.path.join(self.data_dir, seq_name,'train')
+            self.data_dir = os.path.join(self.data_dir, seq_name, "train")
         elif split == 1:
-            self.data_dir = os.path.join(self.data_dir,seq_name, 'val')
+            self.data_dir = os.path.join(self.data_dir, seq_name, "val")
         else:
-            self.data_dir = os.path.join(self.data_dir,seq_name, 'test')
+            self.data_dir = os.path.join(self.data_dir, seq_name, "test")
 
         self.obs_len = obs_len
         self.pred_len = pred_len
@@ -85,10 +100,12 @@ class ETH(Dataset):
         self.image_size = np.array(opt.image_size)
         self.heatmap_size = np.array(opt.heatmap_size)
 
-        self.transform = T.Compose([
-            T.ToTensor(),
-            T.Normalize(mean = [0.485, 0.456, 0.406],std = [0.229, 0.224, 0.225])
-        ])
+        self.transform = T.Compose(
+            [
+                T.ToTensor(),
+                T.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225]),
+            ]
+        )
 
         all_files = os.listdir(self.data_dir)
         all_files = [os.path.join(self.data_dir, _path) for _path in all_files]
@@ -104,29 +121,29 @@ class ETH(Dataset):
             frame_data = []
             for frame in frames:
                 frame_data.append(data[frame == data[:, 0], :])
-            num_sequences = int(
-                math.ceil((len(frames) - self.seq_len + 1) / skip))
+            num_sequences = int(math.ceil((len(frames) - self.seq_len + 1) / skip))
 
             for idx in range(0, num_sequences * self.skip + 1, skip):
-
-                path_split = path.split('/')
+                path_split = path.split("/")
                 img_path = "/".join(path_split[:5])
-                img_name = path_split[-1].split('_')[0]
-                img_path = os.path.join(img_path,f"img/{img_name}/{int(frames[idx+self.obs_len])}.jpg")
+                img_name = path_split[-1].split("_")[0]
+                img_path = os.path.join(
+                    img_path, f"img/{img_name}/{int(frames[idx + self.obs_len])}.jpg"
+                )
 
                 curr_seq_data = np.concatenate(
-                    frame_data[idx:idx + self.seq_len], axis=0)  # (T*P) *4, P is the average num person in the scene
-                peds_in_curr_seq = np.unique(curr_seq_data[:, 1])  # num Person in  the sequence
-                curr_seq_rel = np.zeros((len(peds_in_curr_seq), 2,
-                                         self.seq_len))
+                    frame_data[idx : idx + self.seq_len], axis=0
+                )  # (T*P) *4, P is the average num person in the scene
+                peds_in_curr_seq = np.unique(
+                    curr_seq_data[:, 1]
+                )  # num Person in  the sequence
+                curr_seq_rel = np.zeros((len(peds_in_curr_seq), 2, self.seq_len))
                 curr_seq = np.zeros((len(peds_in_curr_seq), 2, self.seq_len))
-                curr_loss_mask = np.zeros((len(peds_in_curr_seq),
-                                           self.seq_len))
+                curr_loss_mask = np.zeros((len(peds_in_curr_seq), self.seq_len))
                 num_peds_considered = 0
                 _non_linear_ped = []
                 for _, ped_id in enumerate(peds_in_curr_seq):
-                    curr_ped_seq = curr_seq_data[curr_seq_data[:, 1] ==
-                                                 ped_id, :]
+                    curr_ped_seq = curr_seq_data[curr_seq_data[:, 1] == ped_id, :]
                     curr_ped_seq = np.around(curr_ped_seq, decimals=4)
                     pad_front = frames.index(curr_ped_seq[0, 0]) - idx
                     pad_end = frames.index(curr_ped_seq[-1, 0]) - idx + 1
@@ -136,9 +153,8 @@ class ETH(Dataset):
                     curr_ped_seq = curr_ped_seq
                     # Make coordinates relative
                     rel_curr_ped_seq = np.zeros(curr_ped_seq.shape)
-                    rel_curr_ped_seq[:, 1:] = \
-                        curr_ped_seq[:, 1:] - curr_ped_seq[:, :-1]
-                    
+                    rel_curr_ped_seq[:, 1:] = curr_ped_seq[:, 1:] - curr_ped_seq[:, :-1]
+
                     # Linear vs Non-Linear Trajectory
                     # ******
                     # points = get_bezier_parameters(curr_ped_seq[0,:],curr_ped_seq[1,:],degree=2)
@@ -175,20 +191,23 @@ class ETH(Dataset):
         non_linear_ped = np.asarray(non_linear_ped)
 
         # Convert numpy -> Torch Tensor
-        self.obs_traj = torch.from_numpy(
-            seq_list[:, :, :self.obs_len]).type(torch.float)
-        self.pred_traj = torch.from_numpy(
-            seq_list[:, :, self.obs_len:]).type(torch.float)
-        self.obs_traj_rel = torch.from_numpy(
-            seq_list_rel[:, :, :self.obs_len]).type(torch.float)
-        self.pred_traj_rel = torch.from_numpy(
-            seq_list_rel[:, :, self.obs_len:]).type(torch.float)
+        self.obs_traj = torch.from_numpy(seq_list[:, :, : self.obs_len]).type(
+            torch.float
+        )
+        self.pred_traj = torch.from_numpy(seq_list[:, :, self.obs_len :]).type(
+            torch.float
+        )
+        self.obs_traj_rel = torch.from_numpy(seq_list_rel[:, :, : self.obs_len]).type(
+            torch.float
+        )
+        self.pred_traj_rel = torch.from_numpy(seq_list_rel[:, :, self.obs_len :]).type(
+            torch.float
+        )
         self.loss_mask = torch.from_numpy(loss_mask_list).type(torch.float)
         self.non_linear_ped = torch.from_numpy(non_linear_ped).type(torch.float)
         cum_start_idx = [0] + np.cumsum(num_peds_in_seq).tolist()
         self.seq_start_end = [
-            (start, end)
-            for start, end in zip(cum_start_idx, cum_start_idx[1:])
+            (start, end) for start, end in zip(cum_start_idx, cum_start_idx[1:])
         ]
 
     def __len__(self):
@@ -199,12 +218,13 @@ class ETH(Dataset):
         img_path = self.img_path_list[index]
         data_numpy = cv2.imread(img_path)
         data_numpy = cv2.cvtColor(data_numpy, cv2.COLOR_BGR2RGB)
-        data_numpy = cv2.resize(data_numpy,(self.image_size[0],self.image_size[1]),interpolation=cv2.INTER_AREA)
+        data_numpy = cv2.resize(
+            data_numpy,
+            (self.image_size[0], self.image_size[1]),
+            interpolation=cv2.INTER_AREA,
+        )
         raw_img = self.transform(data_numpy)
-        raw_img = raw_img.unsqueeze(0).expand(end-start,-1,-1,-1).float()
-        
-        out = [
-            self.obs_traj[start:end, :], self.pred_traj[start:end, :],
-            raw_img
-        ]
+        raw_img = raw_img.unsqueeze(0).expand(end - start, -1, -1, -1).float()
+
+        out = [self.obs_traj[start:end, :], self.pred_traj[start:end, :], raw_img]
         return out

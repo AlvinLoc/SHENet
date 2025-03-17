@@ -14,7 +14,14 @@ import torch
 
 import sklearn, sklearn.mixture
 from tqdm import tqdm
-from sklearn.cluster import KMeans, AgglomerativeClustering, Birch, SpectralClustering, OPTICS, DBSCAN
+from sklearn.cluster import (
+    KMeans,
+    AgglomerativeClustering,
+    Birch,
+    SpectralClustering,
+    OPTICS,
+    DBSCAN,
+)
 from concurrent.futures import ThreadPoolExecutor
 import threading
 
@@ -27,16 +34,15 @@ def shCommand(text):
     subprocess.run(cmd)
 
 
-def Time(text="time", prnt=True, color='green', on_color='on_grey'):
-    tz = timezone('Asia/Shanghai')
+def Time(text="time", prnt=True, color="green", on_color="on_grey"):
+    tz = timezone("Asia/Shanghai")
     dt = datetime.datetime.now(tz)
     if prnt:
         cprint(text + ": " + str(dt), color=color, on_color=on_color)
     return dt
 
 
-class DistFuncs():
-
+class DistFuncs:
     def Lcss(self, X, Y, L, param):
         return traj_dist.distance.c_e_lcss(X, Y, param)
 
@@ -67,6 +73,7 @@ from tqdm import tqdm
 from concurrent.futures import ThreadPoolExecutor
 import threading
 
+
 def compute_distance(args):
     """计算两条轨迹间的距离"""
     i, j, trajectories, method, LMatrix, paramValue = args
@@ -74,25 +81,28 @@ def compute_distance(args):
     tr2 = trajectories[j]
     return i, j, method(tr1, tr2, LMatrix, paramValue)
 
-def parallel_distance_computation(trajectories, method, LMatrix, paramValue, n_threads=30):
+
+def parallel_distance_computation(
+    trajectories, method, LMatrix, paramValue, n_threads=30
+):
     """使用多线程计算距离矩阵"""
     nTraj = len(trajectories)
     distMatrix = np.zeros((nTraj, nTraj))
-    
+
     # 创建任务列表
     tasks = []
     for i in range(nTraj):
         for j in range(i + 1):  # 只计算下三角矩阵
             tasks.append((i, j, trajectories, method, LMatrix, paramValue))
-    
+
     # 使用线程锁确保进度条更新的线程安全
     lock = threading.Lock()
     completed = 0
     total = len(tasks)
-    
+
     # 创建进度条
     pbar = tqdm(total=total, desc="计算距离矩阵")
-    
+
     def process_result(future):
         nonlocal completed
         i, j, distance = future.result()
@@ -101,7 +111,7 @@ def parallel_distance_computation(trajectories, method, LMatrix, paramValue, n_t
         with lock:
             completed += 1
             pbar.update(1)
-    
+
     # 使用线程池执行任务
     with ThreadPoolExecutor(max_workers=n_threads) as executor:
         futures = []
@@ -109,22 +119,34 @@ def parallel_distance_computation(trajectories, method, LMatrix, paramValue, n_t
             future = executor.submit(compute_distance, task)
             future.add_done_callback(process_result)
             futures.append(future)
-    
+
     pbar.close()
     return distMatrix
 
-def DistMatricesSection(trajectories=None, nTraj=None, dataName="mot15", pickleInDistMatrix=False, test=True,
-                        maxTrajLength=1800,
-                        similarityMeasure=None,
-                        lcssParamList=None, pfParamList=None):
+
+def DistMatricesSection(
+    trajectories=None,
+    nTraj=None,
+    dataName="mot15",
+    pickleInDistMatrix=False,
+    test=True,
+    maxTrajLength=1800,
+    similarityMeasure=None,
+    lcssParamList=None,
+    pfParamList=None,
+):
     if pfParamList is None:
         pfParamList = [0.1, 0.2, 0.3, 0.4]
     if lcssParamList is None:
         lcssParamList = [1, 2, 3, 5, 7, 10]
     if similarityMeasure is None:
-        similarityMeasure = [['Lcss', [1, 2, 3, 5, 7, 10]], ['Dtw', [-1]], ['Hausdorf', [-1]],
-                             ['Edr', [1, 2, 3, 5, 7, 10]], ['Sspd', [-1]],
-                             ]
+        similarityMeasure = [
+            ["Lcss", [1, 2, 3, 5, 7, 10]],
+            ["Dtw", [-1]],
+            ["Hausdorf", [-1]],
+            ["Edr", [1, 2, 3, 5, 7, 10]],
+            ["Sspd", [-1]],
+        ]
         # similarityMeasure = [['GuLcss', [1, 2, 3, 5, 7, 10]], ['GuDtw', [-1]],
         #                      ['GuPf', [0.01, 0.05, 0.1, 0.2, 0.3, 0.5]],
         #                      ['Lcss', [1, 2, 3, 5, 7, 10]], ['Dtw', [-1]], ['Hausdorf', [-1]],
@@ -161,22 +183,28 @@ def DistMatricesSection(trajectories=None, nTraj=None, dataName="mot15", pickleI
         if os.path.exists(pkl_path):
             return
 
-        for (methodName, method) in inspect.getmembers(distFuncs):
+        for methodName, method in inspect.getmembers(distFuncs):
             # try:
             #     method(testTraj0, testTraj1, L, 0.5)+0
             for [distName, paramValueList] in similarityMeasure:
                 if methodName == distName:
-                    if distName in ['Dtw', 'GuDtw', 'GuPf']:
+                    if distName in ["Dtw", "GuDtw", "GuPf"]:
                         LMatrix = LInf.copy()
                     else:
                         LMatrix = LZero.copy()
                     for paramValue in paramValueList:
                         csv_path = f"{file_path}/data/distMatricesFolder/{dataName}_{distName}Matrix_param{paramValue}.csv"
                         if os.path.exists(csv_path):
-                            distMatrix = loadtxt(csv_path, delimiter=',')
-                            assert (distMatrix.shape == (nTraj, nTraj)), f"distMatrix.shape={distMatrix.shape}, nTraj={nTraj}"
-                            print(f"Good to go, {csv_path} loaded !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!")
-                            print(f'{distName}, paramValue={paramValue}, loaded from csv')
+                            distMatrix = loadtxt(csv_path, delimiter=",")
+                            assert distMatrix.shape == (nTraj, nTraj), (
+                                f"distMatrix.shape={distMatrix.shape}, nTraj={nTraj}"
+                            )
+                            print(
+                                f"Good to go, {csv_path} loaded !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!"
+                            )
+                            print(
+                                f"{distName}, paramValue={paramValue}, loaded from csv"
+                            )
                         else:
                             distMatrix = np.zeros((nTraj, nTraj))
                             startTime = Time(prnt=False)
@@ -188,41 +216,68 @@ def DistMatricesSection(trajectories=None, nTraj=None, dataName="mot15", pickleI
                             #         distMatrix[j, i] = distMatrix[i, j]
 
                             # 创建任务列表
-                            distMatrix = parallel_distance_computation(trajectories, method, LMatrix, paramValue)
-                            assert (distMatrix.shape == (nTraj, nTraj)), f"distMatrix.shape={distMatrix.shape}, nTraj={nTraj}"
-                            assert distMatrix.max() > 0.0001, f"distMatrix.max()={distMatrix.max()}"
-                            
+                            distMatrix = parallel_distance_computation(
+                                trajectories, method, LMatrix, paramValue
+                            )
+                            assert distMatrix.shape == (nTraj, nTraj), (
+                                f"distMatrix.shape={distMatrix.shape}, nTraj={nTraj}"
+                            )
+                            assert distMatrix.max() > 0.0001, (
+                                f"distMatrix.max()={distMatrix.max()}"
+                            )
+
                             endTime = Time(prnt=False)
-                            print(f'{distName}, paramValue={paramValue}, runtime:{str(endTime - startTime)}')
-                
-                            savetxt(f"{file_path}/data/distMatricesFolder/{dataName}_{distName}Matrix_param{paramValue}.csv",
-                                    distMatrix, delimiter=',')
-                        distMatrices.append((distMatrix, f"{dataName}_{distName}Matrix_param{paramValue}"))
+                            print(
+                                f"{distName}, paramValue={paramValue}, runtime:{str(endTime - startTime)}"
+                            )
+
+                            savetxt(
+                                f"{file_path}/data/distMatricesFolder/{dataName}_{distName}Matrix_param{paramValue}.csv",
+                                distMatrix,
+                                delimiter=",",
+                            )
+                        distMatrices.append(
+                            (
+                                distMatrix,
+                                f"{dataName}_{distName}Matrix_param{paramValue}",
+                            )
+                        )
 
         if not test:
-            if not os.path.exists(f'{file_path}/mot15/distances'):
-                os.makedirs(f'{file_path}/mot15/distances')
-            
-            pickle_out = open(f'{file_path}/mot15/distances/distMatrices.pickle', "wb")
+            if not os.path.exists(f"{file_path}/mot15/distances"):
+                os.makedirs(f"{file_path}/mot15/distances")
+
+            pickle_out = open(f"{file_path}/mot15/distances/distMatrices.pickle", "wb")
             pickle.dump(distMatrices, pickle_out)
             pickle_out.close()
-
 
     return distMatrices
 
 
-def OdClustering(funcTrajectories=None, nTraj=None, dataName="mot15", modelList=None, nClusDestSet=[4],
-                 modelNames=['average Agglo-Hierarch'], nIter=1, visualize=False, shuffle=False, test=True,
-                 darkTheme=False):
+def OdClustering(
+    funcTrajectories=None,
+    nTraj=None,
+    dataName="mot15",
+    modelList=None,
+    nClusDestSet=[4],
+    modelNames=["average Agglo-Hierarch"],
+    nIter=1,
+    visualize=False,
+    shuffle=False,
+    test=True,
+    darkTheme=False,
+):
     if shuffle or len(nClusDestSet) > 1:
         cprint(
             '\n The internal set of trejecories and thus the output labels go out of sync with the input "trajectories" set if shuffle==True or len(nClusOriginSet)>1 or len(nClusDestSet)>1.\n',
-            color='red', on_color='on_grey')
+            color="red",
+            on_color="on_grey",
+        )
 
     if darkTheme:
-        tickColors = 'white'
+        tickColors = "white"
     else:
-        tickColors = 'black'
+        tickColors = "black"
 
     if nTraj == None:
         nTraj = len(funcTrajectories)
@@ -244,24 +299,43 @@ def OdClustering(funcTrajectories=None, nTraj=None, dataName="mot15", modelList=
     if modelList == None:
         modelList = [
             # (sklearn_extra.cluster.KMedoids(metric='euclidean'), 'KMedoids'),
-            (KMeans(), 'KMeans')
-            , (AgglomerativeClustering(affinity='euclidean', linkage='ward'), 'ward Agglo-Hierarch')
-            , (AgglomerativeClustering(affinity='euclidean', linkage='complete'),
-               'complete Agglo-Hierarch')
-            ,
-            (AgglomerativeClustering(affinity='euclidean', linkage='average'), 'average Agglo-Hierarch')
-            , (AgglomerativeClustering(affinity='euclidean', linkage='single'), 'single Agglo-Hierarch')
-            , (Birch(threshold=0.5, branching_factor=50), 'BIRCH')
-            , (
-                sklearn.mixture.GaussianMixture(covariance_type='full', tol=0.001, reg_covar=1e-06, max_iter=200,
-                                                n_init=5,
-                                                init_params='kmeans'), 'GMM')
-            , (SpectralClustering(affinity='rbf', n_jobs=-1), 'Spectral')
-            , (OPTICS(metric='minkowski', n_jobs=-1), 'OPTICS')
-            , (DBSCAN(metric='euclidean', n_jobs=-1), 'DBSCAN')
+            (KMeans(), "KMeans"),
+            (
+                AgglomerativeClustering(affinity="euclidean", linkage="ward"),
+                "ward Agglo-Hierarch",
+            ),
+            (
+                AgglomerativeClustering(affinity="euclidean", linkage="complete"),
+                "complete Agglo-Hierarch",
+            ),
+            (
+                AgglomerativeClustering(affinity="euclidean", linkage="average"),
+                "average Agglo-Hierarch",
+            ),
+            (
+                AgglomerativeClustering(affinity="euclidean", linkage="single"),
+                "single Agglo-Hierarch",
+            ),
+            (Birch(threshold=0.5, branching_factor=50), "BIRCH"),
+            (
+                sklearn.mixture.GaussianMixture(
+                    covariance_type="full",
+                    tol=0.001,
+                    reg_covar=1e-06,
+                    max_iter=200,
+                    n_init=5,
+                    init_params="kmeans",
+                ),
+                "GMM",
+            ),
+            (SpectralClustering(affinity="rbf", n_jobs=-1), "Spectral"),
+            (OPTICS(metric="minkowski", n_jobs=-1), "OPTICS"),
+            (DBSCAN(metric="euclidean", n_jobs=-1), "DBSCAN"),
         ]
 
-    pickedModels = [(model, title) for (model, title) in modelList if title in modelNames]
+    pickedModels = [
+        (model, title) for (model, title) in modelList if title in modelNames
+    ]
 
     for model, title in pickedModels:
         for iter in range(nIter):
@@ -309,13 +383,21 @@ def OdClustering(funcTrajectories=None, nTraj=None, dataName="mot15", modelList=
                 for k in range(nClusEnd):
                     clusPoints = shufEndPoints[endLabels == endLabelList[k]]
                     for point in clusPoints:
-                        endDistSum += ((point[0] - endCenters[k, 0]) ** 2 + (point[1] - endCenters[k, 1]) ** 2) ** 0.5
+                        endDistSum += (
+                            (point[0] - endCenters[k, 0]) ** 2
+                            + (point[1] - endCenters[k, 1]) ** 2
+                        ) ** 0.5
                 endAvgDists[i, iter] = endDistSum / len(endLabels)
                 # print(endAvgDists[i])
                 if visualize:  # and len(nClusOriginSet)>1 and len(nClusDestSet)>1:
                     try:
-                        print("Calinski Harabasz: {}".format(
-                            sklearn.metrics.calinski_harabasz_score(shufEndPoints, endLabels)))
+                        print(
+                            "Calinski Harabasz: {}".format(
+                                sklearn.metrics.calinski_harabasz_score(
+                                    shufEndPoints, endLabels
+                                )
+                            )
+                        )
                     except:
                         pass
                     print("nClusEnd={}".format(nClusEnd))
@@ -326,8 +408,12 @@ def OdClustering(funcTrajectories=None, nTraj=None, dataName="mot15", modelList=
                         colormap = colormap + cmap
                     plt.figure(figsize=(8, 6))
                     for k in range(nTraj):
-                        plt.scatter(shufEndPoints[k, 0], shufEndPoints[k, 1], c=colormap[endLabels[k]])
-                    plt.scatter(endCenters[:, 0], endCenters[:, 1], c='black')
+                        plt.scatter(
+                            shufEndPoints[k, 0],
+                            shufEndPoints[k, 1],
+                            c=colormap[endLabels[k]],
+                        )
+                    plt.scatter(endCenters[:, 0], endCenters[:, 1], c="black")
                     plt.tick_params(colors=tickColors)
 
                     plt.savefig("./output/{}.jpg".format(title))
@@ -344,9 +430,15 @@ def OdClustering(funcTrajectories=None, nTraj=None, dataName="mot15", modelList=
 
         fig = plt.subplot(2, 1, 1)
         fig.set_ylim(0, plotMax)
-        fig.errorbar(x=nClusDestSet, y=np.mean(endAvgDists, axis=-1),
-                     yerr=np.std(endAvgDists, axis=-1) / (nIter ** 0.5), linestyle='None', fmt='-_', color='orange',
-                     ecolor='blue')
+        fig.errorbar(
+            x=nClusDestSet,
+            y=np.mean(endAvgDists, axis=-1),
+            yerr=np.std(endAvgDists, axis=-1) / (nIter**0.5),
+            linestyle="None",
+            fmt="-_",
+            color="orange",
+            ecolor="blue",
+        )
         fig.tick_params(colors=tickColors)
         fig.set_title("Destination clusters")
         # plt.show()
@@ -358,7 +450,7 @@ def OdClustering(funcTrajectories=None, nTraj=None, dataName="mot15", modelList=
         except:
             pass
         # savetxt('./data/' + dataName + "_startLabels.CSV", startLabels, delimiter=',')
-        savetxt('./data/' + dataName + "_endLabels.CSV", endLabels, delimiter=',')
+        savetxt("./data/" + dataName + "_endLabels.CSV", endLabels, delimiter=",")
 
     # return startLabels, endLabels, shufStartPoints, shufEndPoints
     # unShufStartLabels = np.zeros_like(startLabels)
@@ -370,16 +462,29 @@ def OdClustering(funcTrajectories=None, nTraj=None, dataName="mot15", modelList=
     return unShufEndLabels, endPoints, nClusEnd  # , startAvgDists
 
 
-def OdMajorClusters(trajectories=None, startLabels=None, endLabels=None, dataName="mot15", threshold=10,
-                    visualize=False, test=True,
-                    load=False):
+def OdMajorClusters(
+    trajectories=None,
+    startLabels=None,
+    endLabels=None,
+    dataName="mot15",
+    threshold=10,
+    visualize=False,
+    test=True,
+    load=False,
+):
     if load:
         try:
             # startLabels = loadtxt('./data/' + dataName + "_startLabels.CSV", delimiter=',')
-            endLabels = loadtxt('./data/' + dataName + "_endLabels.CSV", delimiter=',')
+            endLabels = loadtxt("./data/" + dataName + "_endLabels.CSV", delimiter=",")
         except:
             raise Exception(
-                "No such file or directory: ./data/" + dataName + "_endLabels.CSV, " + "./data/" + dataName + "_endLabels.CSV")
+                "No such file or directory: ./data/"
+                + dataName
+                + "_endLabels.CSV, "
+                + "./data/"
+                + dataName
+                + "_endLabels.CSV"
+            )
     # else:
     #     startLabels, endLabels = startLabels, endLabels
 
@@ -418,24 +523,24 @@ def OdMajorClusters(trajectories=None, startLabels=None, endLabels=None, dataNam
         threshold = 10
         plt.figure(figsize=(16, 6))
         fig = plt.subplot(1, 2, 1)
-        fig.set_title('examples of major ODs', color='w')
+        fig.set_title("examples of major ODs", color="w")
         for i in range(countOD.shape[0]):
             for j in range(countOD.shape[1]):
                 if countOD[i, j] > threshold:
                     k = int(sampleTraj[i, j])
                     tr = trajectories[k]
                     fig.plot(tr[:, 0], tr[:, 1], label=len(tr))
-                    fig.scatter(tr[0, 0], tr[0, 1], c=100, s=2, marker='o')
+                    fig.scatter(tr[0, 0], tr[0, 1], c=100, s=2, marker="o")
         fig.legend()
         fig = plt.subplot(1, 2, 2)
-        fig.set_title('examples of minor ODs', color='w')
+        fig.set_title("examples of minor ODs", color="w")
         for i in range(countOD.shape[0]):
             for j in range(countOD.shape[1]):
                 if countOD[i, j] <= threshold:
                     k = int(sampleTraj[i, j])
                     tr = trajectories[k]
                     fig.plot(tr[:, 0], tr[:, 1])
-                    fig.scatter(tr[0, 0], tr[0, 1], c=100, s=2, marker='o')
+                    fig.scatter(tr[0, 0], tr[0, 1], c=100, s=2, marker="o")
         # plt.show()
         plt.savefig("./output/majorODs.jpg")
 
@@ -506,7 +611,8 @@ def Silhouette(model, distMatrix, trajIndices=None):  # , permuting=True):
 
     return S, closestCluster, labels, subDistMatrix, shufSubDistMatrix
 
-class EvalFuncs():
+
+class EvalFuncs:
     def AvgSManual(self, X, odLabels, trajLabels, S):
         return np.mean(S)
 
@@ -541,28 +647,45 @@ class EvalFuncs():
         return sklearn.metrics.davies_bouldin_score(X, trajLabels)
 
 
-def evaluate_trajectory(distMatrices, trajectories, odTrajLabels, refTrajIndices, nClusStart, nClusEnd,
-                        clusRange=list(range(2, 15)), nIter=3, modelList=None, dataName="mot15", test=True,
-                        evalNameList=None,
-                        seed=0.860161037286291):
-    t = Time('start')
+def evaluate_trajectory(
+    distMatrices,
+    trajectories,
+    odTrajLabels,
+    refTrajIndices,
+    nClusStart,
+    nClusEnd,
+    clusRange=list(range(2, 15)),
+    nIter=3,
+    modelList=None,
+    dataName="mot15",
+    test=True,
+    evalNameList=None,
+    seed=0.860161037286291,
+):
+    t = Time("start")
     random.seed(seed)
     if modelList == None:
         modelList = [
             # (sklearn_extra.cluster.KMedoids(metric='precomputed', init='k-medoids++'), 'KMedoids'),
-            (KMeans(), 'KMeans')
+            (KMeans(), "KMeans"),
             # (sklearn.cluster.AgglomerativeClustering(affinity='precomputed', linkage='ward'), 'ward Agglo-Hierarch')
-            , (AgglomerativeClustering(affinity='precomputed', linkage='complete'),
-               'complete Agglo-Hierarch')
-            , (AgglomerativeClustering(affinity='precomputed', linkage='average'),
-               'average Agglo-Hierarch')
-            , (AgglomerativeClustering(affinity='precomputed', linkage='single'),
-               'single Agglo-Hierarch')
+            (
+                AgglomerativeClustering(affinity="precomputed", linkage="complete"),
+                "complete Agglo-Hierarch",
+            ),
+            (
+                AgglomerativeClustering(affinity="precomputed", linkage="average"),
+                "average Agglo-Hierarch",
+            ),
+            (
+                AgglomerativeClustering(affinity="precomputed", linkage="single"),
+                "single Agglo-Hierarch",
+            ),
             # ,(sklearn.cluster.Birch(threshold=0.5, branching_factor=50), 'BIRCH')
             # (sklearn.mixture.GaussianMixture(covariance_type='full', tol=0.001, reg_covar=1e-06, max_iter=200, n_init=5, init_params='kmeans'), 'GMM')
-            , (SpectralClustering(affinity='precomputed', n_jobs=-1), 'Spectral')
-            , (OPTICS(metric='precomputed', n_jobs=-1), 'OPTICS')
-            , (DBSCAN(metric='precomputed', n_jobs=-1), 'DBSCAN')
+            (SpectralClustering(affinity="precomputed", n_jobs=-1), "Spectral"),
+            (OPTICS(metric="precomputed", n_jobs=-1), "OPTICS"),
+            (DBSCAN(metric="precomputed", n_jobs=-1), "DBSCAN"),
         ]
 
     cmap = list(colors.TABLEAU_COLORS)
@@ -574,23 +697,38 @@ def evaluate_trajectory(distMatrices, trajectories, odTrajLabels, refTrajIndices
     randArray = np.random.rand(nIter)  ###### distMatrices refTrajIndices, odTrajLabels
     tempDistMatrices = distMatrices
     if test:
-        tempDistMatrices = [(distMatrix, distName) for (distMatrix, distName) in distMatrices if
-                            distName in [dataName + "_GuLcssMatrix_param7", dataName + "_GuDtwMatrix_param-1",
-                                         dataName + "_GuPfMatrix_param0.2"]]
+        tempDistMatrices = [
+            (distMatrix, distName)
+            for (distMatrix, distName) in distMatrices
+            if distName
+            in [
+                dataName + "_GuLcssMatrix_param7",
+                dataName + "_GuDtwMatrix_param-1",
+                dataName + "_GuPfMatrix_param0.2",
+            ]
+        ]
 
-    initEvalMatrix = np.zeros((len(tempDistMatrices), len(modelList), len(clusRange), len(randArray)))
+    initEvalMatrix = np.zeros(
+        (len(tempDistMatrices), len(modelList), len(clusRange), len(randArray))
+    )
     # print(initEvalMatrix)
 
     evalFuncs = EvalFuncs()
 
     if evalNameList == None:
-        evalNameList = [methodName for (methodName, method) in
-                        inspect.getmembers(evalFuncs, predicate=inspect.ismethod)]
+        evalNameList = [
+            methodName
+            for (methodName, method) in inspect.getmembers(
+                evalFuncs, predicate=inspect.ismethod
+            )
+        ]
 
     evalMeasures = []
     for evalName in evalNameList:
         matched = False
-        for (methodName, method) in inspect.getmembers(evalFuncs, predicate=inspect.ismethod):
+        for methodName, method in inspect.getmembers(
+            evalFuncs, predicate=inspect.ismethod
+        ):
             if methodName == evalName:
                 evalMeasures.append((initEvalMatrix.copy(), method, methodName))
                 matched = True
@@ -599,10 +737,12 @@ def evaluate_trajectory(distMatrices, trajectories, odTrajLabels, refTrajIndices
             #     raise ValueError(f'{evalName} is not a valid name for an evaluation measure! It was skipped.')
             # cprint('{} is not a valid name for an evaluation measure! It was skipped.'.format(evalName), color='red', on_color='on_grey')
         if not matched:
-            raise ValueError(f'{evalName} is not a valid name for an evaluation measure! It was skipped.')
+            raise ValueError(
+                f"{evalName} is not a valid name for an evaluation measure! It was skipped."
+            )
 
     for idxMatrix, (distMatrix, distName) in enumerate(tempDistMatrices):
-        t = Time(distName, color='yellow')
+        t = Time(distName, color="yellow")
 
         for idxSeed, seed in enumerate(randArray):
             random.seed(a=seed)
@@ -624,52 +764,76 @@ def evaluate_trajectory(distMatrices, trajectories, odTrajLabels, refTrajIndices
             for i in range(len(shufTrajIndices)):
                 shufOdTrajLabels[i] = odTrajLabels[shufTrajIndices[i]]
             for i in range(len(refTrajIndices)):
-                shufRefTrajIndices[i] = np.where(shufTrajIndices == refTrajIndices[i])[0][0]
+                shufRefTrajIndices[i] = np.where(shufTrajIndices == refTrajIndices[i])[
+                    0
+                ][0]
             for i in range(shufDistMatrix.shape[0]):
                 for j in range(shufDistMatrix.shape[1]):
-                    shufDistMatrix[i, j] = distMatrix[shufTrajIndices[i], shufTrajIndices[j]]
+                    shufDistMatrix[i, j] = distMatrix[
+                        shufTrajIndices[i], shufTrajIndices[j]
+                    ]
 
             for idxModel, (model, modelName) in enumerate(modelList):
                 for idxClus, nClus in enumerate(clusRange):
                     # model1 = model.copy()
-                    if modelName == 'DBSCAN':
-                        if 'dtw' in distName:
+                    if modelName == "DBSCAN":
+                        if "dtw" in distName:
                             model.eps = 3
-                        elif 'lcss' in distName:
+                        elif "lcss" in distName:
                             model.eps = 0.2
-                        elif 'pf' in distName:
+                        elif "pf" in distName:
                             model.eps = 3
                         else:
                             cprint(
-                                'Epsilon value not specified yet for {} algorithm in the code. default value 0.5 is used.'.format(
-                                    distName), color='red', on_color='on_yellow')
+                                "Epsilon value not specified yet for {} algorithm in the code. default value 0.5 is used.".format(
+                                    distName
+                                ),
+                                color="red",
+                                on_color="on_yellow",
+                            )
                     model.n_clusters = nClus
-                    S, closestCluster, labels, subDistMatrix, shufSubDistMatrix = Silhouette(model=model,
-                                                                                             distMatrix=shufDistMatrix,
-                                                                                             trajIndices=shufRefTrajIndices)
+                    S, closestCluster, labels, subDistMatrix, shufSubDistMatrix = (
+                        Silhouette(
+                            model=model,
+                            distMatrix=shufDistMatrix,
+                            trajIndices=shufRefTrajIndices,
+                        )
+                    )
                     trajLabels = labels
                     for idxEval, (_, evalFunc, evalName) in enumerate(evalMeasures):
                         try:
-                            evalMeasures[idxEval][0][idxMatrix, idxModel, idxClus, idxSeed] = evalFunc(
-                                subDistMatrix, shufOdTrajLabels[shufRefTrajIndices], trajLabels, S)
+                            evalMeasures[idxEval][0][
+                                idxMatrix, idxModel, idxClus, idxSeed
+                            ] = evalFunc(
+                                subDistMatrix,
+                                shufOdTrajLabels[shufRefTrajIndices],
+                                trajLabels,
+                                S,
+                            )
                         except:
-                            cprint(f'Evaluation metric {evalName} failed to work', color='red', on_color='on_grey')
+                            cprint(
+                                f"Evaluation metric {evalName} failed to work",
+                                color="red",
+                                on_color="on_grey",
+                            )
                     # avgS[idxMatrix, idxModel, idxClus, idxSeed] = np.mean(S)
                     # posSIndices = np.where(S>0)[0]
                     # posSRatio[idxMatrix, idxModel, idxClus, idxSeed] = len(posSIndices)/len(S)
                     # ARI[idxMatrix, idxModel, idxClus, idxSeed] = round(sklearn.metrics.adjusted_rand_score(shufOdTrajLabels[shufRefTrajIndices], trajLabels), 3)
                 # t = Time('{} model is done'.format(title))
-            t = Time('idxSeed {} is done'.format(idxSeed))
+            t = Time("idxSeed {} is done".format(idxSeed))
 
     try:
-        os.mkdir('./data/' + dataName + "_output")
+        os.mkdir("./data/" + dataName + "_output")
     except:
         pass
 
     if not test:
-        for (evalMatrix, evalFunc, evalName) in evalMeasures:
+        for evalMatrix, evalFunc, evalName in evalMeasures:
             pickle_out = open(
-                f'./../output/mot15/{dataName}_O{str(nClusStart)}-D{str(nClusEnd)}_{evalName}.pickle', "wb")
+                f"./../output/mot15/{dataName}_O{str(nClusStart)}-D{str(nClusEnd)}_{evalName}.pickle",
+                "wb",
+            )
             pickle.dump(evalMatrix, pickle_out)
             pickle_out.close()
             # pickle_out = open('./data/'+dataName+"_output/"+dataName+"_O"+str(nClusStart)+"-D"+str(nClusEnd)+"_ARI.pickle", "wb")
@@ -682,7 +846,11 @@ def evaluate_trajectory(distMatrices, trajectories, odTrajLabels, refTrajIndices
         # pickle.dump(posSRatio, pickle_out)
         # pickle_out.close()
 
-    cprint('\n "tableResults.csv" not saved. Save it manually.\n', color='red', on_color='on_yellow')
+    cprint(
+        '\n "tableResults.csv" not saved. Save it manually.\n',
+        color="red",
+        on_color="on_yellow",
+    )
     tableResults = []
     # tableResults=[['dataName', 'dist', 'distParam', 'algo', 'algoParam', 'nClus', 'iter', 'ARI', 'avgS', 'posSRatio']]
     # for idxDist, (s, alpha) in enumerate([('dtw', -1), ('lcss', 1), ('lcss', 2), ('lcss', 3), ('lcss', 5), ('lcss', 7), ('lcss', 10), ('pf', 0.1), ('pf', 0.2), ('pf', 0.3), ('pf', 0.4)]):
@@ -693,22 +861,29 @@ def evaluate_trajectory(distMatrices, trajectories, odTrajLabels, refTrajIndices
     # savetxt('./data/'+dataName+"_output/"+dataName+"_O"+str(nClusStart)+"-D"+str(nClusEnd)+'_tableResults.csv', X=tableResults, delimiter=',', fmt ='% s')
 
     for idxMatrix, (distMatrix, distName) in enumerate(tempDistMatrices):
-        cprint(distName, color='green', on_color='on_grey')
+        cprint(distName, color="green", on_color="on_grey")
         plt.figure(figsize=(24, 13))
         for idxEval, (evalMatrix, evalFunc, evalName) in enumerate(evalMeasures):
             fig = plt.subplot(len(evalMeasures) // 4 + 1, 4, idxEval + 1)
             for i in range(len(modelList)):
-                fig.plot(clusRange, np.nanmean(evalMatrix[idxMatrix, i], axis=-1), color=colormap[i],
-                         label=modelList[i][1])
-                fig.fill_between(clusRange,
-                                 np.nanmean(evalMatrix[idxMatrix, i], axis=-1) - np.nanstd(evalMatrix[idxMatrix, i],
-                                                                                           axis=-1),
-                                 np.nanmean(evalMatrix[idxMatrix, i], axis=-1) + np.nanstd(evalMatrix[idxMatrix, i],
-                                                                                           axis=-1),
-                                 color=colormap[i], alpha=0.3)  # , label=modelList[i][1])
+                fig.plot(
+                    clusRange,
+                    np.nanmean(evalMatrix[idxMatrix, i], axis=-1),
+                    color=colormap[i],
+                    label=modelList[i][1],
+                )
+                fig.fill_between(
+                    clusRange,
+                    np.nanmean(evalMatrix[idxMatrix, i], axis=-1)
+                    - np.nanstd(evalMatrix[idxMatrix, i], axis=-1),
+                    np.nanmean(evalMatrix[idxMatrix, i], axis=-1)
+                    + np.nanstd(evalMatrix[idxMatrix, i], axis=-1),
+                    color=colormap[i],
+                    alpha=0.3,
+                )  # , label=modelList[i][1])
             # fig.set_ylim(0,1)
             fig.set_xlim(0, max(clusRange))
-            fig.legend(loc='lower left')
+            fig.legend(loc="lower left")
             fig.set_title(evalName)
 
         # fig = plt.subplot(1,3,2)
@@ -730,24 +905,42 @@ def evaluate_trajectory(distMatrices, trajectories, odTrajLabels, refTrajIndices
         # fig.set_title("positive sil. value ratio")
 
         # plt.title(distName, color='w')
-        plt.savefig('./../output/mot15/' + dataName + '_' + distName[:-4] + "_graphs.pdf", dpi=300)
+        plt.savefig(
+            "./../output/mot15/" + dataName + "_" + distName[:-4] + "_graphs.pdf",
+            dpi=300,
+        )
 
         plt.show()
 
     return evalMeasures, tableResults
 
-def clusterPlot(trajectories,model, distMatrix, trajIndices=None, S=np.array([]), closestCluster=np.array([]), title=None, plotTrajsTogether=False, plotTrajsSeperate=False, plotSilhouette=False, plotSilhouetteTogether=False, darkTheme=True,file_path=None):
-    if darkTheme:
-        tickColors = 'w'
-    else:
-        tickColors = 'black'
 
-    if trajIndices==None:
+def clusterPlot(
+    trajectories,
+    model,
+    distMatrix,
+    trajIndices=None,
+    S=np.array([]),
+    closestCluster=np.array([]),
+    title=None,
+    plotTrajsTogether=False,
+    plotTrajsSeperate=False,
+    plotSilhouette=False,
+    plotSilhouetteTogether=False,
+    darkTheme=True,
+    file_path=None,
+):
+    if darkTheme:
+        tickColors = "w"
+    else:
+        tickColors = "black"
+
+    if trajIndices == None:
         trajIndices = list(range(distMatrix.shape[0]))
-    subDistMatrix = distMatrix[trajIndices][:,trajIndices]
+    subDistMatrix = distMatrix[trajIndices][:, trajIndices]
     model = model.fit(subDistMatrix)
     labels = model.labels_
-    if closestCluster==np.array([]):
+    if closestCluster == np.array([]):
         closestCluster = labels
     clusters = list(set(labels))
     minTrajX = min([min(tr[:, 0]) for tr in trajectories])
@@ -761,84 +954,93 @@ def clusterPlot(trajectories,model, distMatrix, trajIndices=None, S=np.array([])
         nClus = len(set(labels))
     cmap = list(colors.TABLEAU_COLORS)
     colormap = cmap
-    repeat = nClus//len(cmap)
+    repeat = nClus // len(cmap)
     for i in range(repeat):
         colormap = colormap + cmap
 
     if plotTrajsTogether:
-        plt.figure(figsize=(16,12))
+        plt.figure(figsize=(16, 12))
         for i, j in enumerate(trajIndices):
             tr = trajectories[j]
-            plt.plot(tr[:,0], tr[:,1], c=colormap[labels[i]], linewidth=0.3)#, alpha=1)
-            plt.scatter(tr[0,0], tr[0,1], c=100, s=2, marker='o')
-        plt.xlim(minTrajX-20,maxTrajX+20)
-        plt.ylim(minTrajY-20,maxTrajY+20)
+            plt.plot(
+                tr[:, 0], tr[:, 1], c=colormap[labels[i]], linewidth=0.3
+            )  # , alpha=1)
+            plt.scatter(tr[0, 0], tr[0, 1], c=100, s=2, marker="o")
+        plt.xlim(minTrajX - 20, maxTrajX + 20)
+        plt.ylim(minTrajY - 20, maxTrajY + 20)
         plt.tick_params(colors=tickColors)
         if title != None:
             plt.title(label=title, color=tickColors)
 
-        plt.axis('off')
-        plt.savefig(f'{file_path}/output/mot15/tra_cluster0.jpg')
+        plt.axis("off")
+        plt.savefig(f"{file_path}/output/mot15/tra_cluster0.jpg")
         # plt.show()
 
     if plotTrajsSeperate:
-        nRows = -(-nClus//4)
-        plt.figure(figsize=(16,3*nRows), dpi=600)
+        nRows = -(-nClus // 4)
+        plt.figure(figsize=(16, 3 * nRows), dpi=600)
         for i in range(nClus):
-            fig = plt.subplot(nRows, 4, i+1)
+            fig = plt.subplot(nRows, 4, i + 1)
             for j, k in enumerate(trajIndices):
                 if labels[j] == clusters[i]:
                     tr = trajectories[k]
-                    fig.plot(tr[:,0], tr[:,1], c=colormap[closestCluster[j]], linewidth=0.3)
-                    fig.scatter(tr[0,0], tr[0,1], c=100, s=2, marker='o')
-            fig.set_xlim(minTrajX-10,maxTrajX+10)
-            fig.set_ylim(minTrajY-10,maxTrajY+10)
+                    fig.plot(
+                        tr[:, 0], tr[:, 1], c=colormap[closestCluster[j]], linewidth=0.3
+                    )
+                    fig.scatter(tr[0, 0], tr[0, 1], c=100, s=2, marker="o")
+            fig.set_xlim(minTrajX - 10, maxTrajX + 10)
+            fig.set_ylim(minTrajY - 10, maxTrajY + 10)
             fig.tick_params(colors=tickColors)
             fig.set_xticks([])
             fig.set_yticks([])
-            plt.text(minTrajX+25,maxTrajY-20,str(i+1))
+            plt.text(minTrajX + 25, maxTrajY - 20, str(i + 1))
         if title != None:
             plt.suptitle(title, color=tickColors)
 
-        plt.savefig(f'{file_path}/output/mot15/tra_cluster1.jpg')
+        plt.savefig(f"{file_path}/output/mot15/tra_cluster1.jpg")
         # plt.show()
 
-
-    if plotSilhouette and S!=np.array([]):# and closestCluster!=np.array([]):
+    if plotSilhouette and S != np.array([]):  # and closestCluster!=np.array([]):
         cmap = list(colors.TABLEAU_COLORS)
         colormap = cmap
-        repeat = nClus//len(cmap)
+        repeat = nClus // len(cmap)
         for i in range(repeat):
             colormap = colormap + cmap
-        nRows = -(-nClus//4)
-        plt.figure(figsize=(16,3*nRows), dpi=600)
+        nRows = -(-nClus // 4)
+        plt.figure(figsize=(16, 3 * nRows), dpi=600)
         for i in range(nClus):
-            clusList = [j for j in range(len(labels)) if labels[j]==clusters[i]]
+            clusList = [j for j in range(len(labels)) if labels[j] == clusters[i]]
             sortedClusList = [clusList[i] for i in np.argsort(S[clusList])[::-1]]
-            fig = plt.subplot(nRows, 4, i+1)
+            fig = plt.subplot(nRows, 4, i + 1)
             # fig.bar(range(len(clusList)), S[clusList], color=colormap[i])
-            fig.bar(range(len(sortedClusList)), S[sortedClusList], color=[colormap[closestCluster[j]] for j in sortedClusList])
-            fig.set_ylim(-1,1)
+            fig.bar(
+                range(len(sortedClusList)),
+                S[sortedClusList],
+                color=[colormap[closestCluster[j]] for j in sortedClusList],
+            )
+            fig.set_ylim(-1, 1)
             fig.tick_params(colors=tickColors)
             fig.set_xticks([])
             fig.set_yticks([])
             # plt.text(0.01*len(sortedClusList),0.8,str(i))
         if title != None:
             plt.suptitle(title, color=tickColors)
-        plt.savefig(f'{file_path}/output/mot15/tra_cluster2.jpg')
+        plt.savefig(f"{file_path}/output/mot15/tra_cluster2.jpg")
         # plt.show()
 
     if plotSilhouetteTogether:
         sortedS = [i for i in np.argsort(S)[::-1]]
-        plt.bar(range(len(sortedS)), S[sortedS], color=[colormap[closestCluster[j]] for j in sortedS])
-        plt.ylim(-1,1)
+        plt.bar(
+            range(len(sortedS)),
+            S[sortedS],
+            color=[colormap[closestCluster[j]] for j in sortedS],
+        )
+        plt.ylim(-1, 1)
         plt.tick_params(colors=tickColors)
         if title != None:
             plt.title(label=title, color=tickColors)
-        plt.savefig(f'{file_path}/output/mot15/tra_cluster3.jpg')
+        plt.savefig(f"{file_path}/output/mot15/tra_cluster3.jpg")
         # plt.show()
-    
-
 
     plotRootTrajectory = True
     clusterTra = []
@@ -846,22 +1048,23 @@ def clusterPlot(trajectories,model, distMatrix, trajIndices=None, S=np.array([])
         # plt.axis('off')
         plt.figure(figsize=(16, 12))
         for i in range(nClus):
-
             tr = []
             for j, k in enumerate(trajIndices):
                 if labels[j] == clusters[i]:
                     tr.append(trajectories[k])
 
-            tr_mean = np.mean(np.array((tr)),axis=0)
+            tr_mean = np.mean(np.array((tr)), axis=0)
             plt.plot(tr_mean[:, 0], tr_mean[:, 1], c=colormap[i], linewidth=0.3)
             clusterTra.append(tr_mean)
         plt.xlim(minTrajX - 10, maxTrajX + 10)
         plt.ylim(minTrajY - 10, maxTrajY + 10)
         plt.tick_params(colors=tickColors)
-        plt.axis('off')
-        plt.savefig(f'{file_path}/output/mot15/tra_cluster5.jpg')
+        plt.axis("off")
+        plt.savefig(f"{file_path}/output/mot15/tra_cluster5.jpg")
 
-        pickle_out = open(f'{file_path}/output/mot15/distances/trajectoryAfterCluster.pickle', "wb")
+        pickle_out = open(
+            f"{file_path}/output/mot15/distances/trajectoryAfterCluster.pickle", "wb"
+        )
         pickle.dump(clusterTra, pickle_out)
         pickle_out.close()
 

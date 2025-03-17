@@ -14,10 +14,32 @@ class MOT15Wrapper(Dataset):
         dataloader -- args for the MOT_Sequence dataloader
         """
 
-        train_sequences = ['Venice-2', 'KITTI-17', 'KITTI-13', 'ADL-Rundle-8', 'ADL-Rundle-6', 'ETH-Pedcross2',
-                           'ETH-Sunnyday', 'ETH-Bahnhof', 'PETS09-S2L1', 'TUD-Campus', 'TUD-Stadtmitte']
-        test_sequences = ['Venice-1', 'KITTI-19', 'KITTI-16', 'ADL-Rundle-3', 'ADL-Rundle-1', 'AVG-TownCentre',
-                          'ETH-Crossing', 'ETH-Linthescher', 'ETH-Jelmoli', 'PETS09-S2L2', 'TUD-Crossing']
+        train_sequences = [
+            "Venice-2",
+            "KITTI-17",
+            "KITTI-13",
+            "ADL-Rundle-8",
+            "ADL-Rundle-6",
+            "ETH-Pedcross2",
+            "ETH-Sunnyday",
+            "ETH-Bahnhof",
+            "PETS09-S2L1",
+            "TUD-Campus",
+            "TUD-Stadtmitte",
+        ]
+        test_sequences = [
+            "Venice-1",
+            "KITTI-19",
+            "KITTI-16",
+            "ADL-Rundle-3",
+            "ADL-Rundle-1",
+            "AVG-TownCentre",
+            "ETH-Crossing",
+            "ETH-Linthescher",
+            "ETH-Jelmoli",
+            "PETS09-S2L2",
+            "TUD-Crossing",
+        ]
 
         if "train" == split:
             sequences = train_sequences
@@ -41,6 +63,7 @@ class MOT15Wrapper(Dataset):
     def __getitem__(self, idx):
         return self._data[idx]
 
-if __name__ == '__main__':
+
+if __name__ == "__main__":
     data = MOT15Wrapper("train")._data
     print(len(data[0]))
