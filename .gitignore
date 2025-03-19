@@ -26,3 +26,5 @@ clustered_trajs/
 
 model/__pycache__/
 utils/__pycache__/
+
+*.log

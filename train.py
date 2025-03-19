@@ -17,6 +17,9 @@ from model.SHENet import SHENet
 from utils.loss_funcs import CurveLoss
 from utils.data_utils import define_actions
 from utils.parser import args
+from utils.logger import logger
+from utils.model_utils import load_ckpt, save_ckpt
+import datetime
 from tqdm import tqdm
 import pudb
 
@@ -38,28 +41,19 @@ def set_random_seed(seed: int):
 
 
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
-print("Using device: %s" % device)
-
-model = SHENet(args)
-model = model.cuda()
-# model = torch.nn.DataParallel(model, device_ids=[0,1,2]).to(device)
-# print(f"model {model}")
-
-print(
-    "total number of parameters of the network is: "
-    + str(sum(p.numel() for p in model.parameters() if p.requires_grad))
-)
+logger.info("Using device: %s" % device)
 
 # PETS
-model_name = "SHENet/PETS/checkpoints/"
-ckpt = os.path.join(args.model_path, model_name)
+date_str = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+work_dir = os.path.join(args.model_path, date_str)
+logger.add(f"{work_dir}/train.log")
 
-print(ckpt)
-if not os.path.isdir(ckpt):
-    os.makedirs(ckpt)
+logger.info(work_dir)
+if not os.path.isdir(work_dir):
+    os.makedirs(work_dir)
 
 
-def train():
+def train(model, resume_ckpt_path=None):
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-05)
 
     if args.use_scheduler:
@@ -74,7 +68,7 @@ def train():
     val_sequences = ["PETS09-S2L1"]
 
     dataset = datasets.MOT(args, sequences=train_sequences, split=0)
-    print(">>> Training dataset length: {:d}".format(dataset.__len__()))
+    logger.info(">>> Training dataset length: {:d}".format(dataset.__len__()))
     data_loader = DataLoader(
         dataset,
         batch_size=args.batch_size,
@@ -85,7 +79,7 @@ def train():
     )
 
     vald_dataset = datasets.MOT(args, sequences=val_sequences, split=1)
-    print(">>> Validation dataset length: {:d}".format(vald_dataset.__len__()))
+    logger.info(">>> Validation dataset length: {:d}".format(vald_dataset.__len__()))
     vald_loader = DataLoader(
         vald_dataset,
         batch_size=args.batch_size,
@@ -95,24 +89,25 @@ def train():
     )
 
     best_loss = 1000
+    start_epoch = 0
     cur_loss = -1
-    # static_memory = model.module.load_static_memory(ckpt)
-    # static_memory = model.load_static_memory(ckpt)
 
-    # print("static memory size (before): ",len(static_memory))
+    # 检查是否存在检查点文件
+    train_info = load_ckpt(
+        model, resume_ckpt_path, optimizer, args.use_scheduler, scheduler
+    )
+    if train_info is not None:
+        start_epoch, best_loss, model, optimizer, train_loss, val_loss, scheduler = (
+            train_info
+        )
 
     # 定义参数
-    n_modes = 4
-    n_timesteps = 60
-    state_dim = 2
+    static_memory = model.load_static_memory(
+        "clustered_trajs/trajectoryAfterCluster.pickle"
+    )
+    criterion = CurveLoss(static_memory, args.memory_size)
 
-    # 构造 memory 数组
-    # static_memory = np.random.randn(n_modes, n_timesteps, state_dim)
-    static_memory = np.zeros((n_modes, n_timesteps, state_dim))
-
-    criterion = CurveLoss(static_memory)
-
-    for epoch in range(args.n_epochs):
+    for epoch in range(start_epoch, args.n_epochs):
         running_loss = 0
         n = 0
         model.train()
@@ -139,12 +134,18 @@ def train():
 
             loss, _ = criterion(preds, input_root, target, True)
 
-            if cnt % 500 == 0:
-                print(
-                    "[%d, %5d]  training loss: %.3f" % (epoch + 1, cnt + 1, loss.item())
-                )
+            logger.info(
+                "[%d, %5d]  training loss: %.3f" % (epoch + 1, cnt + 1, loss.item())
+            )
 
             optimizer.zero_grad()
+
+            if torch.isnan(loss).any() or torch.isinf(loss).any():
+                logger.error("loss contains NaN or Inf!")
+                continue
+
+            # 梯度裁剪
+            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 
             loss.backward()
 
@@ -152,9 +153,16 @@ def train():
 
             running_loss += loss * batch_dim
 
-        # traj_to_save = [{"root": i} for i in all_trajs]
-        # torch.save(traj_to_save, "./trajs.pt")
-        # exit(0)
+        if args.save_trajectories:
+            logger.info("saving trajectories...")
+            traj_to_save = [{"root": i} for i in all_trajs]
+            torch.save(traj_to_save, "./trajs.pt")
+            logger.critical("trajectories saved! exit...")
+            exit(0)
+
+        if running_loss == 0:
+            logger.error("running_loss is 0")
+            continue
         train_loss.append(running_loss.detach().cpu() / n)
         model.eval()
 
@@ -177,7 +185,7 @@ def train():
                 loss, _ = criterion(preds, input_root, target, False)
 
                 if cnt % 500 == 0:
-                    print(
+                    logger.info(
                         "[%d, %5d]  validation loss: %.3f"
                         % (epoch + 1, cnt + 1, loss.item())
                     )
@@ -185,20 +193,41 @@ def train():
             cur_loss = running_loss.detach().cpu() / n
             val_loss.append(cur_loss)
         dynamic_memory = criterion.memory_curves
-        print("dynamic memory size: ", len(dynamic_memory))
+        logger.info(f"dynamic memory size: {len(dynamic_memory)}")
 
         if args.use_scheduler:
             scheduler.step()
         if best_loss > cur_loss:
             best_loss = cur_loss
-            print("Epoch %d, best loss: %.3f" % (epoch + 1, best_loss))
-            torch.save(dynamic_memory, ckpt + "mem_curves_bank.pt")
-            torch.save(model.state_dict(), ckpt + "model.pth.tar")
+            logger.info("Epoch %d, best loss: %.3f" % (epoch + 1, best_loss))
+            torch.save(dynamic_memory, os.path.join(work_dir, "mem_curves_bank.pt"))
+            torch.save(model.state_dict(), os.path.join(work_dir, "model.pth"))
 
-    pickle_out = open(ckpt + "val_loss.pkl", "wb")
+        # 保存检查点
+        if not save_ckpt(
+            work_dir,
+            epoch,
+            best_loss,
+            model,
+            optimizer,
+            train_loss,
+            val_loss,
+            args.use_scheduler,
+            scheduler,
+        ):
+            raise Exception("model is not good, not saving checkpoint")
+
+    pickle_out = open(work_dir + "val_loss.pkl", "wb")
     pickle.dump(val_loss, pickle_out)
     pickle_out.close()
 
 
 if __name__ == "__main__":
-    train()
+    model = SHENet(args)
+    model = model.cuda()
+    resume_model_path = "/SHENet/output/2025-03-19-04-07-04/checkpoint_latest.pth"
+    logger.info(
+        "total number of parameters of the network is: "
+        + str(sum(p.numel() for p in model.parameters() if p.requires_grad))
+    )
+    train(model, resume_model_path)

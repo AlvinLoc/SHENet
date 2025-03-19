@@ -12,6 +12,7 @@ import sys
 
 sys.path.insert(0, "./")
 from utils.parser import args
+from utils.logger import logger
 from model.position_embedding import add_seq_pos_emb
 from model.transformers import (
     generate_square_subsequent_mask,
@@ -97,8 +98,7 @@ class SHENet(nn.Module):
         self.proj2 = nn.Linear(self.combined_dim, self.combined_dim)
         self.out_layer = nn.Linear(self.combined_dim, self.output_dim)
 
-    def load_static_memory(self, path):
-        file_path = "./output/mot15/distances/bestTrajectoryAfterCluster.pickle"
+    def load_static_memory(self, file_path):
         file = open(file_path, "rb")
         memory_fut = np.array(pickle.load(file))
         return memory_fut
@@ -178,6 +178,12 @@ class SHENet(nn.Module):
 
         # Project the trajectory features
         # 1x1卷积调整通道数量，注意1x1卷积要求输入的维度是[N,C_in,L]，并且输出的维度是[N,C_out,L]，所以需要transpose两次的操作
+        # ! debug
+        if 1:
+            with torch.no_grad():
+                _proj_tra = self.proj_tra(x_tra.transpose(1, 2))
+                if torch.isnan(_proj_tra).any() or torch.isinf(_proj_tra).any():
+                    logger.error("_proj_tra contains NaN or Inf!")
         proj_tra = self.proj_tra(x_tra.transpose(1, 2))
         proj_tra = proj_tra.transpose(1, 2)  # (N,T,D)
 

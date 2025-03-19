@@ -58,7 +58,7 @@ parser.add_argument(
 )
 
 parser.add_argument("--num_goal", type=int, default=1, help="order of cheb")
-parser.add_argument("--memory_size", type=int, default=100, help="memory size")
+parser.add_argument("--memory_size", type=int, default=1e9, help="memory size")
 
 parser.add_argument(
     "--vit_config_file",
@@ -111,7 +111,7 @@ parser.add_argument(
     "--batch_size_test", type=int, default=64, help="batch size for the test set"
 )
 parser.add_argument(
-    "--lr", type=int, default=0.005, help="Learning rate of the optimizer"
+    "--lr", type=float, default=0.005, help="Learning rate of the optimizer"
 )
 parser.add_argument(
     "--use_scheduler", type=bool, default=True, help="use MultiStepLR scheduler"

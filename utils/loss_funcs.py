@@ -6,6 +6,12 @@ from utils import data_utils
 import torch.nn as nn
 from torch.nn import functional as F
 from utils.data_utils import get_bezier_parameters, bezier_curve
+from matplotlib import pyplot as plt
+import datetime
+import os
+import numpy as np
+from collections import defaultdict
+from utils.logger import logger
 
 
 class CurveLoss(nn.Module):
@@ -13,7 +19,7 @@ class CurveLoss(nn.Module):
     Computes the loss for the bezier curve loss
     """
 
-    def __init__(self, memory):
+    def __init__(self, memory, max_extra_curves=1e9):
         """
         Inits the loss.
         :param lattice: numpy array of shape [n_modes, n_timesteps, state_dim]
@@ -26,6 +32,10 @@ class CurveLoss(nn.Module):
         self.curve_length = self.memory_curves.shape[1]
         self.criterion = nn.MSELoss()
         self.cos_sim = nn.CosineSimilarity(dim=1)
+        self.max_memory_size = len(self.memory_curves) + max_extra_curves
+        self.memory_uses = defaultdict(int)
+        self.invalid_curve = self.memory_curves[0] + 1e9
+        self.anchor_based = False
 
     def write_memory(self, path):
         self.memory_curves = torch.load(path)
@@ -100,15 +110,23 @@ class CurveLoss(nn.Module):
         # print(past_curve.shape,cmp_curves.shape)
         idx = torch.argmax(self.cos_sim(past_curve, cmp_curves))
         # idx = torch.argmin(torch.sum((past_curve-cmp_curves)**2,dim=1))
-        return self.memory_curves[idx]
+        return self.memory_curves[idx], idx
 
     def update_memory(self, loss, target, thresh=38.0):
         if loss >= thresh:
+            # logger.info(f"loss: {loss}, thresh: {thresh}, update memory")
+            if len(self.memory_curves) >= self.max_memory_size:
+                least_used_idx = min(self.memory_uses, key=self.memory_uses.get)
+                self.memory_curves[least_used_idx] = self.invalid_curve
+                self.memory_uses[least_used_idx] = int(1e9)  # never delete again
+                logger.info(
+                    f"memory is full, remove the least used curve: {least_used_idx}"
+                )
             self.memory_curves = torch.cat(
                 [self.memory_curves, target.unsqueeze(0)], dim=0
             )
 
-    def forward(self, preds, target, target_points, set_update=False):
+    def forward(self, preds, target, target_points, set_update=False, cnt=1):
         """
         Computes the loss on a batch.
         :param preds: Tensor of shape [batch_size, n_modes]. Output of a linear layer since this class
@@ -134,19 +152,95 @@ class CurveLoss(nn.Module):
         true_index = torch.zeros(batch_size)
         true_preds = target.clone()
         # for logit, ground_truth in zip(clusters, target):
+        # TRAIN_WITH_VIS = cnt % 50 == 0
+        TRAIN_WITH_VIS = False
+        nrows = 4
+        ncols = 8
+        if batch_size != nrows * ncols:
+            TRAIN_WITH_VIS = False
+
+        fig, axes = plt.subplots(
+            nrows=nrows, ncols=ncols, figsize=(ncols * 5, nrows * 5)
+        )
+        axes = axes.flatten()  # 将二维数组转换为一维数组
         for idx in range(batch_size):
-            searched_curve = self.search_curve(preds[idx])
-            pred = preds[idx, 10:]
-            if searched_curve.shape[0] > 10:
-                pred = searched_curve[10:] + preds[idx, 10:]
-            true_preds[idx, 10:] = pred
-            loss = torch.sqrt(self.criterion(pred, target[idx, 10:]))
-            # loss use for others without search
-            # loss = torch.sqrt(self.criterion(preds[idx][10:],target[idx][10:]))
-            if set_update:
-                self.update_memory(loss, target[idx])
-            loss = loss.to(preds.device)
-            batch_losses = torch.cat((batch_losses, loss.unsqueeze(0)), 0)
+            if self.anchor_based:
+                searched_curve, curve_idx = self.search_curve(preds[idx])
+                self.memory_uses[curve_idx] += 1
+                pred = preds[idx, 10:]
+                if searched_curve.shape[0] > 10:
+                    pred = searched_curve[10:] + preds[idx, 10:]
+                true_preds[idx, 10:] = pred
+                loss = torch.sqrt(self.criterion(pred, target[idx, 10:]))
+                # loss use for others without search
+                # loss = torch.sqrt(self.criterion(preds[idx][10:],target[idx][10:]))
+                if set_update:
+                    self.update_memory(loss, target[idx])
+                loss = loss.to(preds.device)
+                batch_losses = torch.cat((batch_losses, loss.unsqueeze(0)), 0)
+            else:
+                true_preds[idx, 10:] = preds[idx][10:]
+                loss = torch.sqrt(self.criterion(preds[idx][10:], target[idx][10:]))
+                loss = loss.to(preds.device)
+                batch_losses = torch.cat((batch_losses, loss.unsqueeze(0)), 0)
+
+            # # for check historical traj same with gt traj
+            # with torch.no_grad():
+            #     front_ten_in_preds = preds[idx][:10]
+            #     front_ten_in_gt = target[idx][:10]
+            #     diffs = front_ten_in_preds - front_ten_in_gt
+            #     diffs = torch.abs(diffs)
+            #     max_diff = torch.max(diffs)
+            #     min_diff = torch.min(diffs)
+            #     if max_diff > 0.5:
+            #         print(f"max_diff: {max_diff}, min_diff: {min_diff}, idx: {idx}")
+
+            if TRAIN_WITH_VIS:
+                # plot pred
+                with torch.no_grad():
+                    pred_points = true_preds[idx][10:].detach().cpu().numpy()
+                    gt_points = target[idx][10:].detach().cpu().numpy()
+                    ax = axes[idx]
+                    # 设置相同的scale
+                    ax.set_aspect("equal")
+                    # 计算所有点的x坐标范围
+                    all_x = np.concatenate([pred_points[:, 0], gt_points[:, 0]])
+                    center_x = (np.min(all_x) + np.max(all_x)) / 2
+                    # 设置横向坐标范围为50m
+                    ax.set_xlim(center_x - 100, center_x + 100)
+                    # 计算y轴范围以保持相同的比例
+                    y_center = (
+                        np.min(np.concatenate([pred_points[:, 1], gt_points[:, 1]]))
+                        + np.max(np.concatenate([pred_points[:, 1], gt_points[:, 1]]))
+                    ) / 2
+                    ax.set_ylim(y_center - 100, y_center + 100)
+                    # 绘制预测轨迹
+                    ax.plot(pred_points[:, 0], pred_points[:, 1], label="pred")
+                    # 绘制真实轨迹
+                    ax.plot(gt_points[:, 0], gt_points[:, 1], label="gt")
+                    # 突出显示预测轨迹的起点
+                    ax.scatter(
+                        pred_points[0, 0],
+                        pred_points[0, 1],
+                        s=100,
+                        color="red",
+                        label="pred start",
+                    )
+                    # 突出显示真实轨迹的起点
+                    ax.scatter(
+                        gt_points[0, 0],
+                        gt_points[0, 1],
+                        s=100,
+                        color="green",
+                        label="gt start",
+                    )
+                    ax.legend()
+        if TRAIN_WITH_VIS:
+            # TODO(@alvin): save to work_dir
+            os.makedirs("output/vis", exist_ok=True)
+            time_str = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
+            fig.savefig(f"output/vis/{time_str}_{idx}.png")
+            plt.close(fig)
 
         return batch_losses.mean(), true_preds
 
