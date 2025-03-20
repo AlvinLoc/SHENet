@@ -1,7 +1,7 @@
 .vscode/
 data/
 pretrained_models/
-
+third-party/
 # 忽略所有 __pycache__ 目录
 __pycache__/*
 model/__pycache__/*
@@ -17,6 +17,7 @@ utils/__pycache__/*
 *.so
 # 忽略所有 .c 文件 (如果你使用 Cython)
 *.c
+*.egg
 
 output/
 output_copy/
