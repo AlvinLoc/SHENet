@@ -1,6 +1,5 @@
 .vscode/
 data/
-third-party/
 pretrained_models/
 
 # 忽略所有 __pycache__ 目录
