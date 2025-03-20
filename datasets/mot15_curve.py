@@ -36,9 +36,9 @@ class MOT(Dataset):
         :param sample_rate:
         """
         if split == 0:
-            self.path_to_data = "./data/2DMOT2015/train/"
+            self.path_to_data = "./data/SHENet/PAV/train/"
         else:
-            self.path_to_data = "./data/2DMOT2015/test/"
+            self.path_to_data = "./data/SHENet/PAV/test/"
         self.split = split
         self.in_n = opt.input_n
         self.out_n = opt.output_n
@@ -111,7 +111,9 @@ class MOT(Dataset):
                 for j in range(num_frames):
                     point = np.array(person[j]["gt"])
                     img_path = person[j]["im_path"]
-                    img_path = "/home" + img_path
+                    img_path = img_path.replace(
+                        "/mancheng/data/2DMOT2015", "./data/MOT15"
+                    )
 
                     root[j, :] = point
                     img_path_list.append(img_path)

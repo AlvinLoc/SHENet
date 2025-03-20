@@ -35,7 +35,7 @@ class CurveLoss(nn.Module):
         self.max_memory_size = len(self.memory_curves) + max_extra_curves
         self.memory_uses = defaultdict(int)
         self.invalid_curve = self.memory_curves[0] + 1e9
-        self.anchor_based = False
+        self.anchor_based = True
 
     def write_memory(self, path):
         self.memory_curves = torch.load(path)
@@ -126,7 +126,7 @@ class CurveLoss(nn.Module):
             self.memory_curves = torch.cat(
                 [self.memory_curves, target.unsqueeze(0)], dim=0
             )
-            logger.warning(f"update memory, memory size: {len(self.memory_curves)}")
+            logger.debug(f"update memory, memory size: {len(self.memory_curves)}")
 
     def forward(self, preds, target, target_points, set_update=False, cnt=1):
         """
@@ -153,18 +153,17 @@ class CurveLoss(nn.Module):
 
         true_index = torch.zeros(batch_size)
         true_preds = target.clone()
-        # for logit, ground_truth in zip(clusters, target):
-        # TRAIN_WITH_VIS = cnt % 50 == 0
         TRAIN_WITH_VIS = False
         nrows = 4
         ncols = 8
         if batch_size != nrows * ncols:
             TRAIN_WITH_VIS = False
 
-        fig, axes = plt.subplots(
-            nrows=nrows, ncols=ncols, figsize=(ncols * 5, nrows * 5)
-        )
-        axes = axes.flatten()  # 将二维数组转换为一维数组
+        if TRAIN_WITH_VIS:
+            fig, axes = plt.subplots(
+                nrows=nrows, ncols=ncols, figsize=(ncols * 5, nrows * 5)
+            )
+            axes = axes.flatten()  # 将二维数组转换为一维数组
         for idx in range(batch_size):
             if self.anchor_based:
                 searched_curve, curve_idx = self.search_curve(preds[idx])

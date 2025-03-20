@@ -60,10 +60,11 @@ parser.add_argument(
 parser.add_argument("--num_goal", type=int, default=1, help="order of cheb")
 parser.add_argument("--memory_size", type=int, default=1e9, help="memory size")
 
+# git@github.com:open-mmlab/mmsegmentation.git branch: 0.x
 parser.add_argument(
     "--vit_config_file",
     type=str,
-    default="./pretrained_models/upernet_swin_small_patch4_window7_512x512_160k_ade20k_pretrain_224x224_1K.py",
+    default="./third-party/mmsegmentation/configs/swin/upernet_swin_small_patch4_window7_512x512_160k_ade20k_pretrain_224x224_1K.py",
     help="config_file",
 )
 parser.add_argument(

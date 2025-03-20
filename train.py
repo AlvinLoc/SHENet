@@ -23,6 +23,7 @@ import datetime
 from tqdm import tqdm
 import pudb
 import wandb
+import psutil
 
 
 os.environ["CUDA_VISIBLE_DEVICES"] = args.gpus
@@ -84,6 +85,7 @@ def train(model, resume_ckpt_path=None):
         pin_memory=True,
         drop_last=True,
     )
+    dataset_length = len(data_loader)
 
     vald_dataset = datasets.MOT(args, sequences=val_sequences, split=1)
     logger.info(">>> Validation dataset length: {:d}".format(vald_dataset.__len__()))
@@ -111,7 +113,7 @@ def train(model, resume_ckpt_path=None):
 
     # 定义参数
     static_memory = model.load_static_memory(
-        "clustered_trajs/trajectoryAfterCluster.pickle"
+        "data/SHENet/pretrained/InitialBank.pickle"
     )
     criterion = CurveLoss(static_memory, args.memory_size)
 
@@ -121,9 +123,7 @@ def train(model, resume_ckpt_path=None):
         model.train()
 
         all_trajs = []
-        for cnt, (input_root, target, scale, meta, raw_img) in tqdm(
-            enumerate(data_loader)
-        ):
+        for cnt, (input_root, target, scale, meta, raw_img) in enumerate(data_loader):
             if args.save_trajectories:
                 trajs = [
                     input_root[i].cpu().numpy() for i in range(input_root.shape[0])
@@ -142,15 +142,21 @@ def train(model, resume_ckpt_path=None):
 
             loss, _ = criterion(preds, input_root, target, True)
 
+            process = psutil.Process(os.getpid())
+            cpu_memory = process.memory_info().rss / (1024.0 * 1024.0)
+            iteration = epoch * dataset_length + cnt
+            anchor_trajs_count = len(criterion.memory_curves)
             logger.info(
-                "[%d, %5d]  training loss: %.3f" % (epoch + 1, cnt + 1, loss.item())
+                f"iter: {iteration} \t \t [{epoch + 1}, {cnt + 1}]  training loss: {loss.item()}, anchor_trajs_count: {anchor_trajs_count}, mem: {cpu_memory:.2f}MB"
             )
             wandb.log(
                 {
                     "train_loss": loss.item(),
+                    "memory": cpu_memory,
+                    "anchor_trajs": anchor_trajs_count,
                     "epoch": epoch,
                 },
-                step=epoch * len(data_loader) + cnt,
+                step=iteration,
             )
 
             optimizer.zero_grad()
