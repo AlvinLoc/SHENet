@@ -6,7 +6,7 @@ import os
 def is_good_model_with_reasonable_weights(model):
     for name, param in model.named_parameters():
         if param.requires_grad:
-            logger.critical(
+            logger.debug(
                 f"name: {name}, weight: sum: {param.sum()}, mean: {param.mean()}, max: {param.max()}, min: {param.min()}"
             )
             if torch.isnan(param).any() or torch.isinf(param).any():

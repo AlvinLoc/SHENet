@@ -103,14 +103,15 @@ class CurveLoss(nn.Module):
         return torch.sqrt(loss_curve)
 
     def search_curve(self, preds):
-        past_curve = preds[:10].reshape(1, -1)  # (T,2)->(1,2T)
-        mem_len = len(self.memory_curves)
-        past_curve = past_curve.expand(mem_len, -1)  # (M,2T)
-        cmp_curves = self.memory_curves[:, :10, :].reshape(mem_len, -1)  # (M,T*2)
-        # print(past_curve.shape,cmp_curves.shape)
-        idx = torch.argmax(self.cos_sim(past_curve, cmp_curves))
-        # idx = torch.argmin(torch.sum((past_curve-cmp_curves)**2,dim=1))
-        return self.memory_curves[idx], idx
+        with torch.no_grad():  # * 提升可读性 query achor本来就没涉及梯度计算
+            past_curve = preds[:10].reshape(1, -1)  # (T,2)->(1,2T)
+            mem_len = len(self.memory_curves)
+            past_curve = past_curve.expand(mem_len, -1)  # (M,2T)
+            cmp_curves = self.memory_curves[:, :10, :].reshape(mem_len, -1)  # (M,T*2)
+            # print(past_curve.shape,cmp_curves.shape)
+            idx = torch.argmax(self.cos_sim(past_curve, cmp_curves))
+            # idx = torch.argmin(torch.sum((past_curve-cmp_curves)**2,dim=1))
+            return self.memory_curves[idx], idx
 
     def update_memory(self, loss, target, thresh=38.0):
         if loss >= thresh:
@@ -125,6 +126,7 @@ class CurveLoss(nn.Module):
             self.memory_curves = torch.cat(
                 [self.memory_curves, target.unsqueeze(0)], dim=0
             )
+            logger.warning(f"update memory, memory size: {len(self.memory_curves)}")
 
     def forward(self, preds, target, target_points, set_update=False, cnt=1):
         """

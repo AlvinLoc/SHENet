@@ -17,11 +17,12 @@ from model.SHENet import SHENet
 from utils.loss_funcs import CurveLoss
 from utils.data_utils import define_actions
 from utils.parser import args
-from utils.logger import logger
+from utils.logger import logger, init_logger
 from utils.model_utils import load_ckpt, save_ckpt
 import datetime
 from tqdm import tqdm
 import pudb
+import wandb
 
 
 os.environ["CUDA_VISIBLE_DEVICES"] = args.gpus
@@ -46,14 +47,20 @@ logger.info("Using device: %s" % device)
 # PETS
 date_str = datetime.datetime.now().strftime("%Y-%m-%d-%H-%M-%S")
 work_dir = os.path.join(args.model_path, date_str)
-logger.add(f"{work_dir}/train.log")
-
-logger.info(work_dir)
-if not os.path.isdir(work_dir):
-    os.makedirs(work_dir)
+init_logger(work_dir)
 
 
 def train(model, resume_ckpt_path=None):
+    wandb.init(
+        project="SHENet",
+        config={
+            "learning_rate": args.lr,
+            "batch_size": args.batch_size,
+            "architecture": "SHENet",
+            "timestamp": date_str,
+        },
+    )
+
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-05)
 
     if args.use_scheduler:
@@ -100,6 +107,7 @@ def train(model, resume_ckpt_path=None):
         start_epoch, best_loss, model, optimizer, train_loss, val_loss, scheduler = (
             train_info
         )
+    wandb.watch(model, log="all", log_freq=1)
 
     # 定义参数
     static_memory = model.load_static_memory(
@@ -137,21 +145,21 @@ def train(model, resume_ckpt_path=None):
             logger.info(
                 "[%d, %5d]  training loss: %.3f" % (epoch + 1, cnt + 1, loss.item())
             )
+            wandb.log(
+                {
+                    "train_loss": loss.item(),
+                    "epoch": epoch,
+                },
+                step=epoch * len(data_loader) + cnt,
+            )
 
             optimizer.zero_grad()
-
-            if torch.isnan(loss).any() or torch.isinf(loss).any():
-                logger.error("loss contains NaN or Inf!")
-                continue
-
-            # 梯度裁剪
-            torch.nn.utils.clip_grad_norm_(model.parameters(), max_norm=1.0)
 
             loss.backward()
 
             optimizer.step()
 
-            running_loss += loss * batch_dim
+            running_loss += loss.detach() * batch_dim
 
         if args.save_trajectories:
             logger.info("saving trajectories...")
@@ -225,7 +233,7 @@ def train(model, resume_ckpt_path=None):
 if __name__ == "__main__":
     model = SHENet(args)
     model = model.cuda()
-    resume_model_path = "/SHENet/output/2025-03-19-04-07-04/checkpoint_latest.pth"
+    resume_model_path = None
     logger.info(
         "total number of parameters of the network is: "
         + str(sum(p.numel() for p in model.parameters() if p.requires_grad))

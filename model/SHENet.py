@@ -160,7 +160,7 @@ class SHENet(nn.Module):
 
     def get_decoder(self):
         decoder_layer = TransformerDecoderLayer(
-            self.embed_dim, self.nhead, self.embed_dim * 4
+            self.embed_dim, self.nhead, self.embed_dim * 4, norm_first=True
         )
         decoder_norm = nn.LayerNorm(self.embed_dim)
         decoder = TransformerDecoder(
@@ -178,21 +178,15 @@ class SHENet(nn.Module):
 
         # Project the trajectory features
         # 1x1卷积调整通道数量，注意1x1卷积要求输入的维度是[N,C_in,L]，并且输出的维度是[N,C_out,L]，所以需要transpose两次的操作
-        # ! debug
-        if 1:
-            with torch.no_grad():
-                _proj_tra = self.proj_tra(x_tra.transpose(1, 2))
-                if torch.isnan(_proj_tra).any() or torch.isinf(_proj_tra).any():
-                    logger.error("_proj_tra contains NaN or Inf!")
         proj_tra = self.proj_tra(x_tra.transpose(1, 2))
         proj_tra = proj_tra.transpose(1, 2)  # (N,T,D)
 
         # position encoding and mask
-        seq_pos_emb = self.seq_pos_emb[None, :in_seq_len]  # (1,T,D)
+        # seq_pos_emb = self.seq_pos_emb[None, :in_seq_len]  # (1,T,D)
 
         # x_emb = proj_tra + seq_pos_emb    # (N,T,D)
         x_emb = proj_tra
-        self_mask = generate_square_subsequent_mask(in_seq_len).cuda()
+        # self_mask = generate_square_subsequent_mask(in_seq_len).cuda()
         # encode the trajectory features
         enc_tra, _ = self.encoder_tra(x_emb)
 

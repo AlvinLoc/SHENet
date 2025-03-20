@@ -28,3 +28,7 @@ model/__pycache__/
 utils/__pycache__/
 
 *.log
+
+debug/
+
+wandb/
