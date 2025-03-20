@@ -52,16 +52,6 @@ init_logger(work_dir)
 
 
 def train(model, resume_ckpt_path=None):
-    wandb.init(
-        project="SHENet",
-        config={
-            "learning_rate": args.lr,
-            "batch_size": args.batch_size,
-            "architecture": "SHENet",
-            "timestamp": date_str,
-        },
-    )
-
     optimizer = optim.Adam(model.parameters(), lr=args.lr, weight_decay=1e-05)
 
     if args.use_scheduler:
@@ -109,13 +99,25 @@ def train(model, resume_ckpt_path=None):
         start_epoch, best_loss, model, optimizer, train_loss, val_loss, scheduler = (
             train_info
         )
-    wandb.watch(model, log="all", log_freq=1)
 
     # 定义参数
     static_memory = model.load_static_memory(
         "data/SHENet/pretrained/InitialBank.pickle"
     )
-    criterion = CurveLoss(static_memory, args.memory_size)
+    criterion = CurveLoss(
+        static_memory, ahchor_based=True, max_extra_curves=args.memory_size
+    )
+
+    wandb.init(
+        project="SHENet",
+        config={
+            "learning_rate": args.lr,
+            "batch_size": args.batch_size,
+            "architecture": "SHENet",
+            "timestamp": date_str,
+        },
+    )
+    wandb.watch(model, log="all", log_freq=1)
 
     for epoch in range(start_epoch, args.n_epochs):
         running_loss = 0

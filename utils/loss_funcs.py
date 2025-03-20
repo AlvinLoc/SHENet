@@ -19,7 +19,7 @@ class CurveLoss(nn.Module):
     Computes the loss for the bezier curve loss
     """
 
-    def __init__(self, memory, max_extra_curves=1e9):
+    def __init__(self, memory, ahchor_based=True, max_extra_curves=1e9):
         """
         Inits the loss.
         :param lattice: numpy array of shape [n_modes, n_timesteps, state_dim]
@@ -30,12 +30,12 @@ class CurveLoss(nn.Module):
         # self.memory = torch.Tensor(memory)
         self.memory_curves, self.memory_points = self.get_memory(memory)
         self.curve_length = self.memory_curves.shape[1]
-        self.criterion = nn.MSELoss()
+        self.criterion = nn.SmoothL1Loss(reduction="mean", beta=0.04)
         self.cos_sim = nn.CosineSimilarity(dim=1)
         self.max_memory_size = len(self.memory_curves) + max_extra_curves
         self.memory_uses = defaultdict(int)
         self.invalid_curve = self.memory_curves[0] + 1e9
-        self.anchor_based = True
+        self.anchor_based = ahchor_based
 
     def write_memory(self, path):
         self.memory_curves = torch.load(path)
