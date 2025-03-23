@@ -81,7 +81,7 @@ def cal_top3_error():
 
 
 if __name__ == "__main__":
-    with open("./output/SHENet/PETS/outputs/res.json", "r") as f:
+    with open("output/SHENet/Venice/outputs/venice.json", "r") as f:
         result = json.load(f)
 
     cal_top1_error(result)

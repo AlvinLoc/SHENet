@@ -99,8 +99,11 @@ class SHENet(nn.Module):
         self.out_layer = nn.Linear(self.combined_dim, self.output_dim)
 
     def load_static_memory(self, file_path):
-        file = open(file_path, "rb")
-        memory_fut = np.array(pickle.load(file))
+        if file_path.endswith(".pickle"):
+            file = open(file_path, "rb")
+            memory_fut = np.array(pickle.load(file))
+        elif file_path.endswith(".pt"):
+            memory_fut = torch.load(file_path, map_location="cpu")
         return memory_fut
 
     def load_vis_backbone(self, opt):

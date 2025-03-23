@@ -1,3 +1,12 @@
+import datetime
+from utils.model_utils import load_model_from_ckpt
+from utils.parser import args
+from utils.data_utils import define_actions
+from utils.loss_funcs import CurveLoss
+from model.SHENet import SHENet
+from torch.utils.data import DataLoader
+from datasets import mot15_curve as datasets
+from tqdm import tqdm
 import pickle
 import torch.optim as optim
 import torch.autograd
@@ -9,14 +18,6 @@ import os
 import sys
 
 sys.path.insert(0, "./")
-
-from datasets import mot15_curve as datasets
-from torch.utils.data import DataLoader
-
-from model.SHENet import SHENet
-from utils.loss_funcs import CurveLoss
-from utils.data_utils import define_actions
-from utils.parser import args
 
 
 os.environ["CUDA_VISIBLE_DEVICES"] = args.gpus
@@ -39,7 +40,8 @@ device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device: %s" % device)
 
 model = SHENet(args)
-model = torch.nn.DataParallel(model, device_ids=[0, 1, 2]).to(device)
+# model = torch.nn.DataParallel(model, device_ids=[0, 1, 2]).to(device)
+model = model.to(device)
 
 print(
     "total number of parameters of the network is: "
@@ -47,12 +49,12 @@ print(
 )
 
 # PETS
-model_name = "SHENet/PETS/checkpoints/"
-ckpt = os.path.join(args.model_path, model_name)
+model_name = "test_" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
+work_dir = os.path.join(args.model_path, model_name)
 
-print(ckpt)
-if not os.path.isdir(ckpt):
-    os.makedirs(ckpt)
+print(work_dir)
+if not os.path.isdir(work_dir):
+    os.makedirs(work_dir)
 
 
 def train():
@@ -92,7 +94,7 @@ def train():
 
     best_loss = 1000
     cur_loss = -1
-    static_memory = model.module.load_static_memory(ckpt)
+    static_memory = model.module.load_static_memory(work_dir)
 
     print("static memory size (before): ", len(static_memory))
     criterion = CurveLoss(static_memory)
@@ -165,16 +167,16 @@ def train():
         if best_loss > cur_loss:
             best_loss = cur_loss
             print("Epoch %d, best loss: %.3f" % (epoch + 1, best_loss))
-            torch.save(dynamic_memory, ckpt + "mem_curves_bank.pt")
-            torch.save(model.state_dict(), ckpt + "model.pth.tar")
+            torch.save(dynamic_memory, work_dir + "mem_curves_bank.pt")
+            torch.save(model.state_dict(), work_dir + "model.pth.tar")
 
-    pickle_out = open(ckpt + "val_loss.pkl", "wb")
+    pickle_out = open(work_dir + "val_loss.pkl", "wb")
     pickle.dump(val_loss, pickle_out)
     pickle_out.close()
 
 
-def test():
-    model.load_state_dict(torch.load(ckpt + "model.pth.tar"))
+def test(ckpt_path):
+    model.load_state_dict(load_model_from_ckpt(ckpt_path))
     model.eval()
 
     running_loss = 0
@@ -193,18 +195,20 @@ def test():
     )
 
     num_samples = len(dataset_test)
-    all_preds = np.zeros((num_samples, args.output_n + args.input_n, 2), dtype=np.float)
-    all_gts = np.zeros((num_samples, args.output_n + args.input_n, 2), dtype=np.float)
+    all_preds = np.zeros(
+        (num_samples, args.output_n + args.input_n, 2), dtype=np.float64
+    )
+    all_gts = np.zeros((num_samples, args.output_n + args.input_n, 2), dtype=np.float64)
 
     memory_his = np.zeros(num_samples, dtype=np.int16)
     all_gt_index = np.zeros(num_samples, dtype=np.int16)
-    static_memory = model.module.load_static_memory(ckpt)
+    static_memory = model.load_static_memory(work_dir)
     curve_loss = CurveLoss(static_memory)
-    dynamic_memory = curve_loss.write_memory(ckpt + "mem_curves_full.pt")
-    print("static memory size: ", dynamic_memory.shape)
+    # dynamic_memory = curve_loss.write_memory(work_dir + "mem_curves_full.pt")
+    print("static memory size: ", static_memory.shape)
     seq_len = args.input_n + args.output_n
 
-    for cnt, (input_root, target, scale, meta, raw_img) in enumerate(test_loader):
+    for cnt, (input_root, target, scale, meta, raw_img) in tqdm(enumerate(test_loader)):
         with torch.no_grad():
             batch_dim = input_root.shape[0]
             input_root = input_root.float().cuda()
@@ -219,14 +223,19 @@ def test():
             loss, preds = curve_loss(preds, input_root, target, False)
 
             running_loss += loss * batch_dim
-            gts = (
-                input_root.cpu().data.numpy()
-                + target.unsqueeze(1).expand(-1, seq_len, -1).cpu().data.numpy()
-            )
-            preds = (
-                preds.cpu().data.numpy()
-                + target.unsqueeze(1).expand(-1, seq_len, -1).cpu().data.numpy()
-            )
+            # gts = (
+            #     input_root.cpu().data.numpy()
+            #     + target.unsqueeze(1).expand(-1, seq_len, -1).cpu().data.numpy()
+            # )
+            # gts = input_root.cpu().data.numpy()
+            gts = target.cpu().data.numpy()
+            # preds = (
+            #     preds.cpu().data.numpy()
+            #     + target.unsqueeze(1).expand(-1, seq_len, -1).cpu().data.numpy()
+            # )
+            # preds = preds.cpu().data.numpy()
+            preds = preds + target[:, :1, :].expand(-1, seq_len, -1)
+            preds = preds.cpu().data.numpy()
 
             all_preds[n : n + batch_dim, :, :] = preds
             all_gts[n : n + batch_dim, :, :] = gts
@@ -239,4 +248,6 @@ def test():
 
 
 if __name__ == "__main__":
-    test()
+    # test("data/SHENet/pretrained/full_model.pth")
+    # test("output/2025-03-21-22-54-48/checkpoint_50.pth")
+    test("output/2025-03-23-11-24-01/checkpoint_100.pth")

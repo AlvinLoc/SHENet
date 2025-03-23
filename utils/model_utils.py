@@ -4,6 +4,7 @@ import os
 
 
 def is_good_model_with_reasonable_weights(model):
+    assert isinstance(model, torch.nn.Module)
     for name, param in model.named_parameters():
         if param.requires_grad:
             logger.debug(
@@ -19,7 +20,7 @@ def load_ckpt(model, ckpt_path, optimizer, use_scheduler, scheduler):
     从指定路径加载检查点文件，恢复模型和优化器的状态。
 
     :param model: 要恢复状态的模型
-    :param ckpt_path: 检查点文件的路径
+    :param ckpt_path: 检查点文件的路径或目录
     :param optimizer: 要恢复状态的优化器
     :param use_scheduler: 是否使用学习率调度器的标志
     :param scheduler: 学习率调度器实例
@@ -32,7 +33,6 @@ def load_ckpt(model, ckpt_path, optimizer, use_scheduler, scheduler):
         logger.warning("No checkpoint found at '{}'".format(checkpoint_path))
         return None
 
-    logger.info("Loading checkpoint '{}'".format(checkpoint_path))
     checkpoint = torch.load(checkpoint_path, map_location=torch.device("cpu"))
     start_epoch = checkpoint["epoch"]
     best_loss = checkpoint["best_loss"]
@@ -46,6 +46,33 @@ def load_ckpt(model, ckpt_path, optimizer, use_scheduler, scheduler):
         "Loaded checkpoint '{}' (epoch {})".format(checkpoint_path, start_epoch)
     )
     return start_epoch, best_loss, model, optimizer, train_loss, val_loss, scheduler
+
+
+def load_model_from_ckpt(ckpt_path):
+    """
+    从指定的检查点路径加载模型权重。
+
+    :param ckpt_path: 检查点文件的路径或目录
+    :return: 加载的模型权重
+    """
+    # 保存输入的检查点路径
+    checkpoint_path = ckpt_path
+    if checkpoint_path is not None and not checkpoint_path.endswith(".pth"):
+        checkpoint_path = os.path.join(ckpt_path, "checkpoint_latest.pth")
+
+    assert os.path.isfile(checkpoint_path), "No checkpoint found at '{}'".format(
+        checkpoint_path
+    )
+
+    logger.info("Loading checkpoint '{}'".format(checkpoint_path))
+    checkpoint = torch.load(checkpoint_path, map_location=torch.device("cpu"))
+    model_weight = checkpoint.get("state_dict")
+    if model_weight is None:
+        model_weight = checkpoint
+
+    # transform multi-gpu model to single-gpu model
+    model_weight = {k.replace("module.", ""): v for k, v in model_weight.items()}
+    return model_weight
 
 
 def save_ckpt(

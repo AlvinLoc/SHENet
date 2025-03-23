@@ -113,7 +113,7 @@ def train(model, resume_ckpt_path=None):
 
     # 定义参数
     static_memory = model.load_static_memory(
-        "data/SHENet/pretrained/InitialBank.pickle"
+        "/home/alvin.gao/SHENet/data/SHENet/pretrained/FinalBank.pt"
     )
     criterion = CurveLoss(static_memory, args.memory_size)
 
@@ -140,7 +140,7 @@ def train(model, resume_ckpt_path=None):
 
             preds = model(input_root[:, : args.input_n], raw_img)
 
-            loss, _ = criterion(preds, input_root, target, True)
+            loss, _ = criterion(preds, input_root, target, False)
 
             process = psutil.Process(os.getpid())
             cpu_memory = process.memory_info().rss / (1024.0 * 1024.0)

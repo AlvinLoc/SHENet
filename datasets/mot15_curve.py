@@ -178,7 +178,7 @@ class MOT(Dataset):
 
             root_curve = torch.stack([root_x, root_y], dim=1)
             root_curve = root_curve - root_curve[0, :]
-            target_points = torch.from_numpy(points)
+            target_points = torch.from_numpy(root)
 
             return (
                 root_curve,
@@ -222,7 +222,9 @@ class MOT(Dataset):
             pred_root = all_preds[n, :, :2][self.in_n :]
             gt_root = all_gts[n, :, :2]
 
-            seq_idx = self.train_sequences.index(img_path.split("/")[6])
+            seq_idx = self.train_sequences.index(
+                img_path.split("/")[4]
+            )  # ! modify here
 
             frames_seq[seq_idx].append(output_n)
 

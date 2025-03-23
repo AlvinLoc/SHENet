@@ -1,9 +1,11 @@
 from cv2 import error
+from tqdm import tqdm
 import numpy as np
 import pandas as pd
 import cv2
 import matplotlib.pyplot as plt
 import json
+import os
 
 
 def vis_img(img, root_pred, root_gt, save_path):
@@ -46,13 +48,14 @@ def run(joint, idx, input_n, output_n, save_path):
 if __name__ == "__main__":
     # lstm offsets classifys_offsets  scene1_curve, lstm_curve
 
-    with open("./output/SHENet/PETS/outputs/res.json", "r") as f:
+    with open("output/SHENet/Venice/outputs/venice.json", "r") as f:
         data = json.load(f)
 
     root_gt = []
     save_path = "./test_img/mot_curve/"
+    os.makedirs(save_path, exist_ok=True)
 
     input_n = 10
     output_n = 50
-    for idx in range(1, len(data), 5):
+    for idx in tqdm(range(1, len(data), 1)):
         run(data, idx, input_n, output_n, save_path)
