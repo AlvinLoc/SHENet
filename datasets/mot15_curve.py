@@ -14,6 +14,7 @@ import sys
 
 sys.path.insert(0, "./")
 from utils.parser import args
+from utils.logger import logger
 from utils.data_utils import (
     get_affine_transform,
     exec_affine_transform,
@@ -127,11 +128,13 @@ class MOT(Dataset):
 
                 data.append(
                     {
-                        "seq_name": seq_name,
-                        "data_id": zip(tmp_data_idx_1, tmp_data_idx_2),
-                        "img_path": img_path_list,
-                        "root": root,
-                        "num_frames": num_frames,
+                        "seq_name": seq_name,  # dataset name
+                        "data_id": zip(
+                            tmp_data_idx_1, tmp_data_idx_2
+                        ),  # person_id - 1, start_frame_idx
+                        "img_path": img_path_list,  # all frame paths
+                        "root": root,  # each frame persion position
+                        "num_frames": num_frames,  # total frames
                     }
                 )
 
@@ -150,7 +153,11 @@ class MOT(Dataset):
         img_path = self.data[key]["img_path"][fs[self.in_n - 1]]
         # img_path_list = [img_path_list[i] for i in fs]
         root = self.data[key]["root"][fs]
-        meta = torch.tensor([key, start_frame])
+        meta = {
+            "person_id": key,
+            "start_frame": start_frame,
+            "img_path": img_path,
+        }
         return self.get_raw_data(img_path, root, meta)
 
     def get_raw_data(self, img_path, root, meta):
@@ -193,47 +200,28 @@ class MOT(Dataset):
             root_curve = root - root[0, :]
             return root_curve, root[0, :], torch.tensor([width, height]), meta, raw_img
 
-    def evaluate(self, opt, all_preds, all_gts, mem_his=None):
+    def evaluate(self, out_dir, all_preds, all_gts, all_metas, mem_his=None):
         sample_num = len(self.data_idx)
-        data = self.data
         pred_save = []
 
-        out_dir = os.path.join(args.model_path, "SHENet/Venice/outputs/")
         if not os.path.isdir(out_dir):
             os.makedirs(out_dir)
-        output_path = out_dir + "venice.json"
+        output_path = os.path.join(out_dir, "venice.json")
 
         output_n = self.out_n
-        frames_seq = [[] for _ in range(len(self.train_sequences))]
         assert sample_num == all_preds.shape[0]
         all_frames = 0
         for n in range(sample_num):
-            key, start_frame = self.data_idx[n]
-            num_frames = self.data[key]["num_frames"]
-
-            fs = np.arange(start_frame, num_frames)
-
-            root = data[key]["root"][fs]
-            gt_root = root
-
-            img_path = data[key]["img_path"][fs[self.in_n - 1]]
-            # mem_his = memory_his[n]
-
-            pred_root = all_preds[n, :, :2][self.in_n :]
+            pred_root = all_preds[n, :, :2]
             gt_root = all_gts[n, :, :2]
-
-            seq_idx = self.train_sequences.index(
-                img_path.split("/")[4]
-            )  # ! modify here
-
-            frames_seq[seq_idx].append(output_n)
-
             all_frames += output_n
-
+            meta = all_metas[n]
             pred_save.append(
                 {
                     "image_id": n,
-                    "img_path": img_path,
+                    "person_id": meta["person_id"],
+                    "img_path": meta["img_path"],
+                    "start_frame": meta["start_frame"],
                     "root": gt_root.tolist(),
                     "pred_root": pred_root.tolist(),
                 }
@@ -241,4 +229,4 @@ class MOT(Dataset):
 
         with open(output_path, "w") as f:
             json.dump(pred_save, f)
-        print("Test result is saved at " + output_path)
+        logger.critical("Test result is saved at " + output_path)

@@ -32,3 +32,5 @@ utils/__pycache__/
 debug/
 
 wandb/
+
+test_img/

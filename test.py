@@ -7,6 +7,7 @@ from model.SHENet import SHENet
 from torch.utils.data import DataLoader
 from datasets import mot15_curve as datasets
 from tqdm import tqdm
+from utils.logger import logger, init_logger
 import pickle
 import torch.optim as optim
 import torch.autograd
@@ -53,8 +54,7 @@ model_name = "test_" + datetime.datetime.now().strftime("%Y-%m-%d_%H-%M-%S")
 work_dir = os.path.join(args.model_path, model_name)
 
 print(work_dir)
-if not os.path.isdir(work_dir):
-    os.makedirs(work_dir)
+init_logger(work_dir)
 
 
 def train():
@@ -199,10 +199,10 @@ def test(ckpt_path):
         (num_samples, args.output_n + args.input_n, 2), dtype=np.float64
     )
     all_gts = np.zeros((num_samples, args.output_n + args.input_n, 2), dtype=np.float64)
-
-    memory_his = np.zeros(num_samples, dtype=np.int16)
-    all_gt_index = np.zeros(num_samples, dtype=np.int16)
-    static_memory = model.load_static_memory(work_dir)
+    all_metas = [{} for _ in range(num_samples)]
+    static_memory = model.load_static_memory(
+        "/home/alvin.gao/SHENet/data/SHENet/pretrained/FinalBank.pt"
+    )
     curve_loss = CurveLoss(static_memory)
     # dynamic_memory = curve_loss.write_memory(work_dir + "mem_curves_full.pt")
     print("static memory size: ", static_memory.shape)
@@ -237,17 +237,43 @@ def test(ckpt_path):
             preds = preds + target[:, :1, :].expand(-1, seq_len, -1)
             preds = preds.cpu().data.numpy()
 
+            if 0:
+                for i in range(batch_dim):
+                    gt_start_point = gts[i, 0, :]
+                    pred_start_point = preds[i, 0, :]
+                    max_diff = (gt_start_point - pred_start_point).max()
+                    min_diff = (gt_start_point - pred_start_point).min()
+                    max_diff = max(abs(max_diff), abs(min_diff))
+                    logger.info(
+                        f"max diff: {max_diff}, gt: {gt_start_point}, pred: {pred_start_point}"
+                    )
+                    if max_diff > 10:
+                        logger.critical(
+                            f"max diff: {max_diff}, gt: {gt_start_point}, pred: {pred_start_point}"
+                        )
+
+            assert preds.shape == gts.shape, (
+                f"preds shape: {preds.shape}, gts shape: {gts.shape}, not equal"
+            )
             all_preds[n : n + batch_dim, :, :] = preds
             all_gts[n : n + batch_dim, :, :] = gts
+            for k, v in meta.items():
+                for i in range(batch_dim):
+                    curr_meta = (
+                        v[i].cpu().data.numpy().tolist()
+                        if isinstance(v[i], torch.Tensor)
+                        else v[i]
+                    )
+                    all_metas[n + i][k] = curr_meta
 
             n += batch_dim
 
     cur_loss = running_loss.detach().cpu() / n
-    print("test loss: %.3f" % (cur_loss))
-    dataset_test.evaluate(args, all_preds, all_gts)
+    logger.critical("test loss: %.3f" % (cur_loss))
+    dataset_test.evaluate(work_dir, all_preds, all_gts, all_metas)
 
 
 if __name__ == "__main__":
     # test("data/SHENet/pretrained/full_model.pth")
     # test("output/2025-03-21-22-54-48/checkpoint_50.pth")
-    test("output/2025-03-23-11-24-01/checkpoint_100.pth")
+    test("output/2025-03-24-22-13-08/checkpoint_50.pth")

@@ -14,7 +14,9 @@ def cal_top1_error(joint1):
     fde10 = fde20 = fde30 = fde40 = fde50 = ade10 = ade20 = ade30 = ade40 = ade50 = 0
     for i in range(n):
         root_gt = np.array(joint1[i]["root"])[input_n : input_n + output_n]  # 50*2
-        root_pred = np.array(joint1[i]["pred_root"])  # 50*2
+        root_pred = np.array(
+            joint1[i]["pred_root"][input_n : input_n + output_n]
+        )  # 50*2
 
         distances_pred = np.linalg.norm(root_pred - root_gt, axis=1)  # 50
 
@@ -81,7 +83,7 @@ def cal_top3_error():
 
 
 if __name__ == "__main__":
-    with open("output/SHENet/Venice/outputs/venice.json", "r") as f:
+    with open("output/test_2025-03-25_19-56-15/venice.json", "r") as f:
         result = json.load(f)
 
     cal_top1_error(result)

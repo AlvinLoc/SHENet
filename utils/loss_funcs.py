@@ -109,6 +109,7 @@ class CurveLoss(nn.Module):
             past_curve = past_curve.expand(mem_len, -1)  # (M,2T)
             cmp_curves = self.memory_curves[:, :10, :].reshape(mem_len, -1)  # (M,T*2)
             # print(past_curve.shape,cmp_curves.shape)
+            # TODO: 可能真值是等距离采样的，因此姑且认为采用cos_sim的方法找最相似曲线是合适的，待验证
             idx = torch.argmax(self.cos_sim(past_curve, cmp_curves))
             # idx = torch.argmin(torch.sum((past_curve-cmp_curves)**2,dim=1))
             return self.memory_curves[idx], idx
@@ -127,6 +128,36 @@ class CurveLoss(nn.Module):
                 [self.memory_curves, target.unsqueeze(0)], dim=0
             )
             logger.debug(f"update memory, memory size: {len(self.memory_curves)}")
+
+    def get_pred_traj_with_anchor(self, searched_curve, pred):
+        with torch.no_grad():
+            # 获取当前预测的历史轨迹
+            gt_back_traj = pred[:10]  # (10,2)
+            # 计算当前轨迹方向向量（最后两个点的差值）
+            gt_back_dir = gt_back_traj[-1] - gt_back_traj[-2]
+            gt_back_dir = gt_back_dir / torch.norm(gt_back_dir)  # 归一化
+
+            # 获取锚点曲线的历史轨迹
+            anchor_back_traj = searched_curve[:10]  # (10,2)
+            anchor_dir = anchor_back_traj[-1] - anchor_back_traj[-2]
+            anchor_dir = anchor_dir / torch.norm(anchor_dir)
+
+            # 计算旋转角度差（弧度）
+            cos_theta = torch.dot(gt_back_dir, anchor_dir)
+            sin_theta = torch.sqrt(1 - cos_theta**2 + 1e-6)
+            rotation_matrix = torch.tensor(
+                [[cos_theta, -sin_theta], [sin_theta, cos_theta]],
+                device=searched_curve.device,
+            )  # (2,2)
+            # translation = gt_back_traj[-1] - anchor_back_traj[-1]
+
+            # transform到第十个点重合
+            adjusted_curve = searched_curve - anchor_back_traj[-1]
+            adjusted_curve = (
+                torch.matmul(adjusted_curve, rotation_matrix) + gt_back_traj[-1]
+            )
+            # 合并历史轨迹与调整后的曲线
+            return adjusted_curve
 
     def forward(self, preds, target, target_points, set_update=False, cnt=1):
         """
@@ -168,8 +199,12 @@ class CurveLoss(nn.Module):
             if self.anchor_based:
                 searched_curve, curve_idx = self.search_curve(preds[idx])
                 self.memory_uses[curve_idx] += 1
+                true_preds[idx, :10] = preds[idx, :10]
                 pred = preds[idx, 10:]
                 if searched_curve.shape[0] > 10:
+                    searched_curve = self.get_pred_traj_with_anchor(
+                        searched_curve, preds[idx]
+                    )
                     pred = searched_curve[10:] + preds[idx, 10:]
                 true_preds[idx, 10:] = pred
                 loss = torch.sqrt(self.criterion(pred, target[idx, 10:]))

@@ -134,7 +134,6 @@ def train(model, resume_ckpt_path=None):
             n += batch_dim
             input_root = input_root.float().cuda()
             target = target.float().cuda()
-            meta = meta.cuda()
             scale = scale.cuda()
             raw_img = raw_img.cuda()
 
