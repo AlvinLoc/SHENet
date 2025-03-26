@@ -1,3 +1,12 @@
+from utils.data_utils import get_bezier_parameters, bezier_curve
+from utils.data_utils import (
+    get_affine_transform,
+    exec_affine_transform,
+    generate_root_heatmaps,
+    generate_root_distance_maps,
+)
+from utils.logger import logger
+from utils.parser import args
 from torch.utils import data
 from torch.utils.data import Dataset
 import numpy as np
@@ -13,15 +22,6 @@ import os
 import sys
 
 sys.path.insert(0, "./")
-from utils.parser import args
-from utils.logger import logger
-from utils.data_utils import (
-    get_affine_transform,
-    exec_affine_transform,
-    generate_root_heatmaps,
-    generate_root_distance_maps,
-)
-from utils.data_utils import get_bezier_parameters, bezier_curve
 # 26 9 19 27 24 79 24 98 19 7 10
 
 
@@ -60,6 +60,7 @@ class MOT(Dataset):
 
         self.use_scene = True
         self.use_rough_data = True
+        self.smooth_traj = False
 
         # subs = np.array([[1, 6, 7, 8, 9], [11], [5]])
         # acts = data_utils.define_actions(actions)
@@ -176,15 +177,19 @@ class MOT(Dataset):
         if self.use_rough_data:
             # input root data from the timestep input-1, input-1 as the origin point
             root = root[: self.in_n + self.out_n]
-            points = get_bezier_parameters(root[:, 0], root[:, 1], degree=2)
-            xvals, yvals = bezier_curve(points, nTimes=1000)
-            idx = torch.linspace(0, 999, root.shape[0])
-            idx = idx.int()
-            root_x = torch.from_numpy(xvals[::-1][idx])
-            root_y = torch.from_numpy(yvals[::-1][idx])
+            if self.smooth_traj:
+                points = get_bezier_parameters(root[:, 0], root[:, 1], degree=2)
+                xvals, yvals = bezier_curve(points, nTimes=1000)
+                idx = torch.linspace(0, 999, root.shape[0])
+                idx = idx.int()
+                root_x = torch.from_numpy(xvals[::-1][idx])
+                root_y = torch.from_numpy(yvals[::-1][idx])
 
-            root_curve = torch.stack([root_x, root_y], dim=1)
-            root_curve = root_curve - root_curve[0, :]
+                root_curve = torch.stack([root_x, root_y], dim=1)
+                root_curve = root_curve - root_curve[0, :]
+            else:
+                root_curve = torch.from_numpy(root)
+                root_curve = root_curve - root_curve[0, :]
             target_points = torch.from_numpy(root)
 
             return (
@@ -200,7 +205,9 @@ class MOT(Dataset):
             root_curve = root - root[0, :]
             return root_curve, root[0, :], torch.tensor([width, height]), meta, raw_img
 
-    def evaluate(self, out_dir, all_preds, all_gts, all_metas, mem_his=None):
+    def evaluate(
+        self, out_dir, all_preds, all_gts, all_smooth_gts, all_metas, mem_his=None
+    ):
         sample_num = len(self.data_idx)
         pred_save = []
 
@@ -214,6 +221,7 @@ class MOT(Dataset):
         for n in range(sample_num):
             pred_root = all_preds[n, :, :2]
             gt_root = all_gts[n, :, :2]
+            smooth_gt_root = all_smooth_gts[n, :, :2]
             all_frames += output_n
             meta = all_metas[n]
             pred_save.append(
@@ -223,6 +231,7 @@ class MOT(Dataset):
                     "img_path": meta["img_path"],
                     "start_frame": meta["start_frame"],
                     "root": gt_root.tolist(),
+                    "smooth_root": smooth_gt_root.tolist(),
                     "pred_root": pred_root.tolist(),
                 }
             )

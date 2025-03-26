@@ -10,7 +10,16 @@ import matplotlib.pyplot as plt
 from matplotlib.image import imread
 
 
-def vis_img(img_path, person_id, start_frame, input_n, root_pred, root_gt, save_dir):
+def vis_img(
+    img_path,
+    person_id,
+    start_frame,
+    input_n,
+    root_pred,
+    root_gt,
+    root_smooth_gt,
+    save_dir,
+):
     img = imread(img_path)
 
     n = root_gt.shape[0]
@@ -27,6 +36,14 @@ def vis_img(img_path, person_id, start_frame, input_n, root_pred, root_gt, save_
 
     plt.plot(
         root_pred[:, 0], root_pred[:, 1], "r", linewidth=2, marker="o", markersize=4
+    )
+    plt.plot(
+        root_smooth_gt[:, 0],
+        root_smooth_gt[:, 1],
+        "y",
+        linewidth=2,
+        marker="o",
+        markersize=4,
     )
 
     plt.scatter(
@@ -80,6 +97,7 @@ def vis_img(img_path, person_id, start_frame, input_n, root_pred, root_gt, save_
 def run(joint, idx, input_n, output_n, save_path):
     root_pred = np.array(joint[idx]["pred_root"])
     root_gt = np.array(joint[idx]["root"])
+    root_smooth_gt = np.array(joint[idx]["smooth_root"])
     img_path = joint[idx]["img_path"]
     person_id = joint[idx]["person_id"]
     start_frame = joint[idx]["start_frame"]
@@ -97,6 +115,7 @@ def run(joint, idx, input_n, output_n, save_path):
         input_n,
         root_pred,
         root_gt,
+        root_smooth_gt,
         save_path,
     )
 
@@ -104,7 +123,7 @@ def run(joint, idx, input_n, output_n, save_path):
 if __name__ == "__main__":
     # lstm offsets classifys_offsets  scene1_curve, lstm_curve
 
-    with open("output/test_2025-03-26_14-20-06/venice.json", "r") as f:
+    with open("output/test_2025-03-26_16-12-44/venice.json", "r") as f:
         data = json.load(f)
 
     root_gt = []
