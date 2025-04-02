@@ -100,22 +100,31 @@ def train(model, resume_ckpt_path=None):
     best_loss = 1000
     start_epoch = 0
     cur_loss = -1
+    static_memory = None
 
-    # 检查是否存在检查点文件
     train_info = load_ckpt(
         model, resume_ckpt_path, optimizer, args.use_scheduler, scheduler
     )
     if train_info is not None:
-        start_epoch, best_loss, model, optimizer, train_loss, val_loss, scheduler = (
-            train_info
-        )
+        (
+            start_epoch,
+            best_loss,
+            model,
+            optimizer,
+            train_loss,
+            val_loss,
+            scheduler,
+            static_memory,
+        ) = train_info
     wandb.watch(model, log="all", log_freq=1)
 
-    # 定义参数
-    static_memory = model.load_static_memory(
-        "/home/alvin.gao/SHENet/data/SHENet/pretrained/FinalBank.pt"
-    )
-    criterion = CurveLoss(static_memory, args.memory_size)
+    if static_memory is None:
+        memory_path = "data/SHENet/pretrained/FinalBank.pt"
+        logger.info(f"Initializing static memory from file: {memory_path}")
+        static_memory = model.load_static_memory(memory_path)
+    else:
+        logger.info(f"Initializing static memory from checkpoint")
+    criterion = CurveLoss(static_memory, args.memory_size, use_anchor=True)
 
     for epoch in range(start_epoch, args.n_epochs):
         running_loss = 0
@@ -123,7 +132,9 @@ def train(model, resume_ckpt_path=None):
         model.train()
 
         all_trajs = []
-        for cnt, (input_root, target, scale, meta, raw_img) in enumerate(data_loader):
+        for cnt, (input_root, target, scale, meta, raw_img, sample_hash) in enumerate(
+            data_loader
+        ):
             if args.save_trajectories:
                 trajs = [
                     input_root[i].cpu().numpy() for i in range(input_root.shape[0])
@@ -139,7 +150,7 @@ def train(model, resume_ckpt_path=None):
 
             preds = model(input_root[:, : args.input_n], raw_img)
 
-            loss, _ = criterion(preds, input_root, target, False)
+            loss, _, _ = criterion(preds, input_root, target, False)
 
             process = psutil.Process(os.getpid())
             cpu_memory = process.memory_info().rss / (1024.0 * 1024.0)
@@ -169,7 +180,7 @@ def train(model, resume_ckpt_path=None):
         if args.save_trajectories:
             logger.info("saving trajectories...")
             traj_to_save = [{"root": i} for i in all_trajs]
-            torch.save(traj_to_save, "./trajs.pt")
+            torch.save(traj_to_save, "data/trajs.pt")
             logger.critical("trajectories saved! exit...")
             exit(0)
 
@@ -182,9 +193,14 @@ def train(model, resume_ckpt_path=None):
         with torch.no_grad():
             running_loss = 0
             n = 0
-            for cnt, (input_root, target, scale, meta, raw_img) in enumerate(
-                vald_loader
-            ):
+            for cnt, (
+                input_root,
+                target,
+                scale,
+                meta,
+                raw_img,
+                sample_hash,
+            ) in enumerate(vald_loader):
                 batch_dim = input_root.shape[0]
                 n += batch_dim
                 input_root = input_root.float().cuda()
@@ -195,7 +211,7 @@ def train(model, resume_ckpt_path=None):
 
                 preds = model(input_root[:, : args.input_n], raw_img)
 
-                loss, _ = criterion(preds, input_root, target, False)
+                loss, _, _ = criterion(preds, input_root, target, False)
 
                 if cnt % 500 == 0:
                     logger.info(
@@ -227,6 +243,7 @@ def train(model, resume_ckpt_path=None):
             val_loss,
             args.use_scheduler,
             scheduler,
+            dynamic_memory,
         ):
             raise Exception("model is not good, not saving checkpoint")
 

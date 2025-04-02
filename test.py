@@ -97,7 +97,7 @@ def train():
     static_memory = model.module.load_static_memory(work_dir)
 
     print("static memory size (before): ", len(static_memory))
-    criterion = CurveLoss(static_memory)
+    criterion = CurveLoss(static_memory, args.memory_size, use_anchor=True)
 
     for epoch in range(args.n_epochs):
         running_loss = 0
@@ -202,16 +202,21 @@ def test(ckpt_path):
         (num_samples, args.output_n + args.input_n, 2), dtype=np.float64
     )
     all_gts = np.zeros((num_samples, args.output_n + args.input_n, 2), dtype=np.float64)
+    all_anchor_trajs = np.zeros(
+        (num_samples, args.output_n + args.input_n, 2), dtype=np.float64
+    )
     all_metas = [{} for _ in range(num_samples)]
     static_memory = model.load_static_memory(
         "/home/alvin.gao/SHENet/data/SHENet/pretrained/FinalBank.pt"
     )
-    curve_loss = CurveLoss(static_memory)
+    curve_loss = CurveLoss(static_memory, args.memory_size, use_anchor=True)
     # dynamic_memory = curve_loss.write_memory(work_dir + "mem_curves_full.pt")
     print("static memory size: ", static_memory.shape)
     seq_len = args.input_n + args.output_n
 
-    for cnt, (input_root, target, scale, meta, raw_img) in tqdm(enumerate(test_loader)):
+    for cnt, (input_root, target, scale, meta, raw_img, hash) in tqdm(
+        enumerate(test_loader)
+    ):
         with torch.no_grad():
             batch_dim = input_root.shape[0]
             input_root = input_root.float().cuda()
@@ -223,7 +228,7 @@ def test(ckpt_path):
             # for concta and cross modal
             # loss,_= curve_loss(preds,input_root,target,False)
             # for search
-            loss, preds = curve_loss(preds, input_root, target, False)
+            loss, preds, anchor_trajs = curve_loss(preds, input_root, target, False)
 
             running_loss += loss * batch_dim
             # gts = (
@@ -242,6 +247,9 @@ def test(ckpt_path):
 
             smooth_gt = input_root + target[:, :1, :].expand(-1, seq_len, -1)
             smooth_gt = smooth_gt.cpu().data.numpy()
+
+            anchor_trajs = anchor_trajs + target[:, :1, :].expand(-1, seq_len, -1)
+            anchor_trajs = anchor_trajs.cpu().data.numpy()
 
             if 0:
                 for i in range(batch_dim):
@@ -264,6 +272,7 @@ def test(ckpt_path):
             all_preds[n : n + batch_dim, :, :] = preds
             all_gts[n : n + batch_dim, :, :] = gts
             all_smooth_gts[n : n + batch_dim, :, :] = smooth_gt
+            all_anchor_trajs[n : n + batch_dim, :, :] = anchor_trajs
             for k, v in meta.items():
                 for i in range(batch_dim):
                     curr_meta = (
@@ -277,7 +286,9 @@ def test(ckpt_path):
 
     cur_loss = running_loss.detach().cpu() / n
     logger.critical("test loss: %.3f" % (cur_loss))
-    dataset_test.evaluate(work_dir, all_preds, all_gts, all_smooth_gts, all_metas)
+    dataset_test.evaluate(
+        work_dir, all_preds, all_gts, all_smooth_gts, all_anchor_trajs, all_metas
+    )
 
 
 if __name__ == "__main__":

@@ -40,12 +40,22 @@ def load_ckpt(model, ckpt_path, optimizer, use_scheduler, scheduler):
     optimizer.load_state_dict(checkpoint["optimizer"])
     train_loss = checkpoint["train_loss"]
     val_loss = checkpoint["val_loss"]
+    anchor_trajs = checkpoint.get("anchor_trajs", None)
     if use_scheduler:
         scheduler.load_state_dict(checkpoint["scheduler"])
     logger.info(
         "Loaded checkpoint '{}' (epoch {})".format(checkpoint_path, start_epoch)
     )
-    return start_epoch, best_loss, model, optimizer, train_loss, val_loss, scheduler
+    return (
+        start_epoch,
+        best_loss,
+        model,
+        optimizer,
+        train_loss,
+        val_loss,
+        scheduler,
+        anchor_trajs,
+    )
 
 
 def load_model_from_ckpt(ckpt_path):
@@ -85,6 +95,7 @@ def save_ckpt(
     val_loss,
     use_scheduler,
     scheduler,
+    anchor_trajs,
 ):
     """
     保存模型的检查点文件。
@@ -112,12 +123,13 @@ def save_ckpt(
         "optimizer": optimizer.state_dict(),
         "train_loss": train_loss,
         "val_loss": val_loss,
+        "anchor_trajs": anchor_trajs,
     }
     if use_scheduler:
         checkpoint["scheduler"] = scheduler.state_dict()
-    torch.save(checkpoint, checkpoint_path)
-    # save backup
-    backup_path = os.path.join(work_dir, "checkpoint_{}.pth".format(epoch + 1))
-    torch.save(checkpoint, backup_path)
-    # logger.info("saved checkpoint to '{}'".format(checkpoint_path))
+    torch.save(checkpoint, checkpoint_path)  # save latest
+    # save every 10 epochs
+    if epoch % 10 == 0:
+        backup_path = os.path.join(work_dir, f"checkpoint_{epoch + 1}.pth")
+        torch.save(checkpoint, backup_path)
     return True

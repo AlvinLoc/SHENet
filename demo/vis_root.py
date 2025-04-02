@@ -18,6 +18,7 @@ def vis_img(
     root_pred,
     root_gt,
     root_smooth_gt,
+    anchor_traj,
     save_dir,
 ):
     img = imread(img_path)
@@ -32,16 +33,38 @@ def vis_img(
     fig = plt.figure(figsize=(width / dpi, height / dpi), dpi=dpi)
     plt.imshow(img)
 
-    plt.plot(root_gt[:, 0], root_gt[:, 1], "g", linewidth=2, marker="o", markersize=4)
+    plt.plot(
+        root_gt[:, 0],
+        root_gt[:, 1],
+        "g",
+        linewidth=2,
+        marker="o",
+        markersize=4,
+        zorder=10,
+    )
 
     plt.plot(
-        root_pred[:, 0], root_pred[:, 1], "r", linewidth=2, marker="o", markersize=4
+        root_pred[:, 0],
+        root_pred[:, 1],
+        "r",
+        linewidth=2,
+        marker="o",
+        markersize=4,
+        zorder=11,
     )
     plt.plot(
         root_smooth_gt[:, 0],
         root_smooth_gt[:, 1],
         "y",
         linewidth=2,
+        marker="o",
+        markersize=4,
+    )
+    plt.plot(
+        anchor_traj[:, 0],
+        anchor_traj[:, 1],
+        "m",
+        linewidth=1,
         marker="o",
         markersize=4,
     )
@@ -60,7 +83,15 @@ def vis_img(
         c="b",
         s=100,
         marker="*",
-        zorder=10,
+        zorder=11,
+    )
+    plt.scatter(
+        anchor_traj[input_n - 1, 0],
+        anchor_traj[input_n - 1, 1],
+        c="m",
+        s=50,
+        marker="*",
+        zorder=11,
     )
 
     plt.text(5, 50, "pred trajectory", color="r", fontsize=12)
@@ -98,6 +129,7 @@ def run(joint, idx, input_n, output_n, save_path):
     root_pred = np.array(joint[idx]["pred_root"])
     root_gt = np.array(joint[idx]["root"])
     root_smooth_gt = np.array(joint[idx]["smooth_root"])
+    anchor_traj = np.array(joint[idx]["anchor_traj"])
     img_path = joint[idx]["img_path"]
     person_id = joint[idx]["person_id"]
     start_frame = joint[idx]["start_frame"]
@@ -116,18 +148,20 @@ def run(joint, idx, input_n, output_n, save_path):
         root_pred,
         root_gt,
         root_smooth_gt,
+        anchor_traj,
         save_path,
     )
 
 
 if __name__ == "__main__":
     # lstm offsets classifys_offsets  scene1_curve, lstm_curve
-
-    with open("output/test_2025-03-26_16-12-44/venice.json", "r") as f:
+    work_dir = "output/test_2025-03-30_16-09-16"
+    venice_path = os.path.join(work_dir, "venice.json")
+    with open(venice_path, "r") as f:
         data = json.load(f)
 
     root_gt = []
-    save_path = "./test_img/mot_curve/"
+    save_path = os.path.join(work_dir, "vis_root")
     os.makedirs(save_path, exist_ok=True)
 
     input_n = 10
