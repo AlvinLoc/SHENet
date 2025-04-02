@@ -206,7 +206,14 @@ class MOT(Dataset):
             return root_curve, root[0, :], torch.tensor([width, height]), meta, raw_img
 
     def evaluate(
-        self, out_dir, all_preds, all_gts, all_smooth_gts, all_metas, mem_his=None
+        self,
+        out_dir,
+        all_preds,
+        all_gts,
+        all_smooth_gts,
+        all_anchor_trajs,
+        all_metas,
+        mem_his=None,
     ):
         sample_num = len(self.data_idx)
         pred_save = []
@@ -222,6 +229,7 @@ class MOT(Dataset):
             pred_root = all_preds[n, :, :2]
             gt_root = all_gts[n, :, :2]
             smooth_gt_root = all_smooth_gts[n, :, :2]
+            anchor_traj = all_anchor_trajs[n, :, :2]
             all_frames += output_n
             meta = all_metas[n]
             pred_save.append(
@@ -233,9 +241,10 @@ class MOT(Dataset):
                     "root": gt_root.tolist(),
                     "smooth_root": smooth_gt_root.tolist(),
                     "pred_root": pred_root.tolist(),
+                    "anchor_traj": anchor_traj.tolist(),
                 }
             )
 
         with open(output_path, "w") as f:
-            json.dump(pred_save, f)
+            json.dump(pred_save, f, indent=4)
         logger.critical("Test result is saved at " + output_path)

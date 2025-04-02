@@ -32,10 +32,12 @@ class CurveLoss(nn.Module):
         self.curve_length = self.memory_curves.shape[1]
         self.criterion = nn.MSELoss()
         self.cos_sim = nn.CosineSimilarity(dim=1)
+        # self.cos_sim = JointsMSELoss()
         self.max_memory_size = len(self.memory_curves) + max_extra_curves
         self.memory_uses = defaultdict(int)
         self.invalid_curve = self.memory_curves[0] + 1e9
-        self.anchor_based = True
+        # self.anchor_based = True
+        self.anchor_based = False
 
     def write_memory(self, path):
         self.memory_curves = torch.load(path)
@@ -110,8 +112,23 @@ class CurveLoss(nn.Module):
             cmp_curves = self.memory_curves[:, :10, :].reshape(mem_len, -1)  # (M,T*2)
             # print(past_curve.shape,cmp_curves.shape)
             # TODO: 可能真值是等距离采样的，因此姑且认为采用cos_sim的方法找最相似曲线是合适的，待验证
-            idx = torch.argmax(self.cos_sim(past_curve, cmp_curves))
-            # idx = torch.argmin(torch.sum((past_curve-cmp_curves)**2,dim=1))
+            # idx = torch.argmax(self.cos_sim(past_curve, cmp_curves))
+            # idx = torch.argmin(torch.sum((past_curve - cmp_curves) ** 2, dim=1))
+            # ADE + FDE
+            cossim = self.cos_sim(past_curve, cmp_curves)
+            ade = torch.norm(past_curve - cmp_curves, dim=1)
+            fde = torch.norm(past_curve[:, -2:] - cmp_curves[:, -2:], dim=1)
+            loss = ade + fde * 2.0 - cossim
+            idx = torch.argmin(loss)
+            return self.memory_curves[idx], idx
+        
+    def find_most_similar_anchor(self, target):
+        with torch.no_grad():
+            mem_len = len(self.memory_curves)
+            past_curve = target.reshape(1, -1)  # (T,2)->(1,2T)
+            past_curve = past_curve.expand(mem_len, -1)  # (M,T*2)
+            cmp_curves = self.memory_curves.reshape(mem_len, -1)  # (M,T*2)
+            idx = torch.argmin(torch.sum((past_curve - cmp_curves) ** 2, dim=1))
             return self.memory_curves[idx], idx
 
     def update_memory(self, loss, target, thresh=38.0):
@@ -170,6 +187,7 @@ class CurveLoss(nn.Module):
 
         # If using GPU, need to copy the lattice to the GPU if haven't done so already
         # This ensures we only copy it once
+        # preds, selected_anchors = preds
         if self.memory_curves.device != preds.device:
             self.memory_curves = self.memory_curves.to(preds.device)
             self.memory_points = self.memory_points.to(preds.device)
@@ -184,6 +202,7 @@ class CurveLoss(nn.Module):
 
         true_index = torch.zeros(batch_size)
         true_preds = target.clone()
+        anchor_trajs = torch.zeros_like(target)
         TRAIN_WITH_VIS = False
         nrows = 4
         ncols = 8
@@ -202,10 +221,11 @@ class CurveLoss(nn.Module):
                 true_preds[idx, :10] = preds[idx, :10]
                 pred = preds[idx, 10:]
                 if searched_curve.shape[0] > 10:
-                    searched_curve = self.get_pred_traj_with_anchor(
+                    anchor_traj = self.get_pred_traj_with_anchor(
                         searched_curve, preds[idx]
                     )
-                    pred = searched_curve[10:] + preds[idx, 10:]
+                    anchor_trajs[idx] = anchor_traj
+                    pred = anchor_traj[10:] + preds[idx, 10:]
                 true_preds[idx, 10:] = pred
                 loss = torch.sqrt(self.criterion(pred, target[idx, 10:]))
                 # loss use for others without search
@@ -218,6 +238,13 @@ class CurveLoss(nn.Module):
                 true_preds[idx, 10:] = preds[idx][10:]
                 loss = torch.sqrt(self.criterion(preds[idx][10:], target[idx][10:]))
                 loss = loss.to(preds.device)
+
+                # # find most similar curve in memory
+                # searched_curve, curve_idx = self.find_most_similar_anchor(target[idx])
+                # anchor_trajs[idx] = searched_curve
+                # loss2 = torch.sqrt(self.criterion(selected_anchors[idx], searched_curve))
+                # loss2 = loss2.to(preds.device)
+                # loss = loss + loss2 * 1.0
                 batch_losses = torch.cat((batch_losses, loss.unsqueeze(0)), 0)
 
             # # for check historical traj same with gt traj
@@ -278,7 +305,7 @@ class CurveLoss(nn.Module):
             fig.savefig(f"output/vis/{time_str}_{idx}.png")
             plt.close(fig)
 
-        return batch_losses.mean(), true_preds
+        return batch_losses.mean(), true_preds, anchor_trajs
 
 
 class ClassificationLoss(nn.Module):

@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import pandas as pd
 import cv2
@@ -13,9 +14,10 @@ def cal_top1_error(joint1):
     n = len(joint1)
     fde10 = fde20 = fde30 = fde40 = fde50 = ade10 = ade20 = ade30 = ade40 = ade50 = 0
     for i in range(n):
-        root_gt = np.array(joint1[i]["root"])[input_n : input_n + output_n]  # 50*2
+        root_gt = np.array(joint1[i]["root"])[
+            input_n: input_n + output_n]  # 50*2
         root_pred = np.array(
-            joint1[i]["pred_root"][input_n : input_n + output_n]
+            joint1[i]["pred_root"][input_n: input_n + output_n]
         )  # 50*2
 
         distances_pred = np.linalg.norm(root_pred - root_gt, axis=1)  # 50
@@ -48,7 +50,8 @@ def cal_top3_error():
     n = len(result)
     fde10 = fde20 = fde30 = fde40 = fde50 = ade10 = ade20 = ade30 = ade40 = ade50 = 0
     for i in range(n):
-        root_gt = np.array(result[i]["root"])[input_n : input_n + output_n]  # 50*2
+        root_gt = np.array(result[i]["root"])[
+            input_n: input_n + output_n]  # 50*2
         root_gt_rep = root_gt.reshape(1, output_n, 2).repeat(3, axis=0)
         root_pred = np.array(result[i]["pred_root"])  # 3*50*2
 
@@ -83,7 +86,9 @@ def cal_top3_error():
 
 
 if __name__ == "__main__":
-    with open("output/test_2025-03-26_16-12-44/venice.json", "r") as f:
+    work_dir = "output/test_2025-03-27_21-01-07"
+    venice_path = os.path.join(work_dir, "venice.json")
+    with open(venice_path, "r") as f:
         result = json.load(f)
 
     cal_top1_error(result)

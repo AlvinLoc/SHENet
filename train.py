@@ -139,7 +139,7 @@ def train(model, resume_ckpt_path=None):
 
             preds = model(input_root[:, : args.input_n], raw_img)
 
-            loss, _ = criterion(preds, input_root, target, False)
+            loss, _, _ = criterion(preds, input_root, target, False)
 
             process = psutil.Process(os.getpid())
             cpu_memory = process.memory_info().rss / (1024.0 * 1024.0)
@@ -195,7 +195,7 @@ def train(model, resume_ckpt_path=None):
 
                 preds = model(input_root[:, : args.input_n], raw_img)
 
-                loss, _ = criterion(preds, input_root, target, False)
+                loss, _, _ = criterion(preds, input_root, target, False)
 
                 if cnt % 500 == 0:
                     logger.info(

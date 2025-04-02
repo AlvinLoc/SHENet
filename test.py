@@ -202,6 +202,9 @@ def test(ckpt_path):
         (num_samples, args.output_n + args.input_n, 2), dtype=np.float64
     )
     all_gts = np.zeros((num_samples, args.output_n + args.input_n, 2), dtype=np.float64)
+    all_anchor_trajs = np.zeros(
+        (num_samples, args.output_n + args.input_n, 2), dtype=np.float64
+    )
     all_metas = [{} for _ in range(num_samples)]
     static_memory = model.load_static_memory(
         "/home/alvin.gao/SHENet/data/SHENet/pretrained/FinalBank.pt"
@@ -223,7 +226,7 @@ def test(ckpt_path):
             # for concta and cross modal
             # loss,_= curve_loss(preds,input_root,target,False)
             # for search
-            loss, preds = curve_loss(preds, input_root, target, False)
+            loss, preds, anchor_trajs = curve_loss(preds, input_root, target, False)
 
             running_loss += loss * batch_dim
             # gts = (
@@ -242,6 +245,9 @@ def test(ckpt_path):
 
             smooth_gt = input_root + target[:, :1, :].expand(-1, seq_len, -1)
             smooth_gt = smooth_gt.cpu().data.numpy()
+
+            anchor_trajs = anchor_trajs + target[:, :1, :].expand(-1, seq_len, -1)
+            anchor_trajs = anchor_trajs.cpu().data.numpy()
 
             if 0:
                 for i in range(batch_dim):
@@ -264,6 +270,7 @@ def test(ckpt_path):
             all_preds[n : n + batch_dim, :, :] = preds
             all_gts[n : n + batch_dim, :, :] = gts
             all_smooth_gts[n : n + batch_dim, :, :] = smooth_gt
+            all_anchor_trajs[n : n + batch_dim, :, :] = anchor_trajs
             for k, v in meta.items():
                 for i in range(batch_dim):
                     curr_meta = (
@@ -277,10 +284,12 @@ def test(ckpt_path):
 
     cur_loss = running_loss.detach().cpu() / n
     logger.critical("test loss: %.3f" % (cur_loss))
-    dataset_test.evaluate(work_dir, all_preds, all_gts, all_smooth_gts, all_metas)
+    dataset_test.evaluate(
+        work_dir, all_preds, all_gts, all_smooth_gts, all_anchor_trajs, all_metas
+    )
 
 
 if __name__ == "__main__":
     # test("data/SHENet/pretrained/full_model.pth")
     # test("output/2025-03-21-22-54-48/checkpoint_50.pth")
-    test("output/2025-03-24-22-13-08/checkpoint_50.pth")
+    test("ckpt/checkpoint_50.pth")
