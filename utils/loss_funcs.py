@@ -110,8 +110,23 @@ class CurveLoss(nn.Module):
             cmp_curves = self.memory_curves[:, :10, :].reshape(mem_len, -1)  # (M,T*2)
             # print(past_curve.shape,cmp_curves.shape)
             # TODO: 可能真值是等距离采样的，因此姑且认为采用cos_sim的方法找最相似曲线是合适的，待验证
-            idx = torch.argmax(self.cos_sim(past_curve, cmp_curves))
-            # idx = torch.argmin(torch.sum((past_curve-cmp_curves)**2,dim=1))
+            # idx = torch.argmax(self.cos_sim(past_curve, cmp_curves))
+            # idx = torch.argmin(torch.sum((past_curve - cmp_curves) ** 2, dim=1))
+            # ADE + FDE
+            cossim = self.cos_sim(past_curve, cmp_curves)
+            ade = torch.norm(past_curve - cmp_curves, dim=1)
+            fde = torch.norm(past_curve[:, -2:] - cmp_curves[:, -2:], dim=1)
+            loss = ade + fde * 2.0 - cossim
+            idx = torch.argmin(loss)
+            return self.memory_curves[idx], idx
+
+    def find_most_similar_anchor(self, target):
+        with torch.no_grad():
+            mem_len = len(self.memory_curves)
+            past_curve = target.reshape(1, -1)  # (T,2)->(1,2T)
+            past_curve = past_curve.expand(mem_len, -1)  # (M,T*2)
+            cmp_curves = self.memory_curves.reshape(mem_len, -1)  # (M,T*2)
+            idx = torch.argmin(torch.sum((past_curve - cmp_curves) ** 2, dim=1))
             return self.memory_curves[idx], idx
 
     def update_memory(self, loss, target, thresh=38.0):
@@ -170,6 +185,7 @@ class CurveLoss(nn.Module):
 
         # If using GPU, need to copy the lattice to the GPU if haven't done so already
         # This ensures we only copy it once
+        # preds, selected_anchors = preds
         if self.memory_curves.device != preds.device:
             self.memory_curves = self.memory_curves.to(preds.device)
             self.memory_points = self.memory_points.to(preds.device)
@@ -220,6 +236,15 @@ class CurveLoss(nn.Module):
                 true_preds[idx, 10:] = preds[idx][10:]
                 loss = torch.sqrt(self.criterion(preds[idx][10:], target[idx][10:]))
                 loss = loss.to(preds.device)
+
+                # # find most similar curve in memory
+                # searched_curve, curve_idx = self.find_most_similar_anchor(target[idx])
+                # anchor_trajs[idx] = searched_curve
+                # loss2 = torch.sqrt(self.criterion(selected_anchors[idx], searched_curve))
+                # loss2 = loss2.to(preds.device)
+                # loss = loss + loss2 * 1.0
+
+                # anchor_trajs[idx] = selected_anchors[idx].detach()
                 batch_losses = torch.cat((batch_losses, loss.unsqueeze(0)), 0)
 
             # # for check historical traj same with gt traj

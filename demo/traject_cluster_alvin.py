@@ -89,6 +89,7 @@ def evaluate(trajectories):
 from sklearn.cluster import DBSCAN
 from sklearn.cluster import OPTICS
 
+
 def plot(trajectories, hashes):
     file_path = "./"
     file = open(f"{file_path}/output/mot15/distances/distMatrices.pickle", "rb")
@@ -139,6 +140,7 @@ def d_cluster():
 import numpy as np
 from sklearn.cluster import AgglomerativeClustering
 from scipy.spatial.distance import euclidean
+
 
 def calc_angle_difference(traj1, traj2):
     """
@@ -197,6 +199,7 @@ def custom_distance(traj1, traj2, angle_threshold=np.pi / 360.0 * 5.0):
     if angle > angle_threshold:
         return spatial_distance * 2.0
     return spatial_distance
+
 
 def cluster_trajectories(trajectories, angle_threshold=np.pi / 360.0 * 5.0):
     """

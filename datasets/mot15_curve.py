@@ -39,7 +39,8 @@ class MOT(Dataset):
         if split == 0:
             self.path_to_data = "./data/SHENet/PAV/train/"
         else:
-            self.path_to_data = "./data/SHENet/PAV/test/"
+            self.path_to_data = "./data/SHENet/PAV/train/"
+            # self.path_to_data = "./data/SHENet/PAV/test/"
         self.split = split
         self.in_n = opt.input_n
         self.out_n = opt.output_n

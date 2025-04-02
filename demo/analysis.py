@@ -1,3 +1,4 @@
+import os
 import numpy as np
 import pandas as pd
 import cv2
@@ -83,7 +84,9 @@ def cal_top3_error():
 
 
 if __name__ == "__main__":
-    with open("output/test_2025-03-26_16-12-44/venice.json", "r") as f:
+    work_dir = "output/test_2025-03-27_12-19-56"
+    venice_path = os.path.join(work_dir, "venice.json")
+    with open(venice_path, "r") as f:
         result = json.load(f)
 
     cal_top1_error(result)
