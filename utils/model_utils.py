@@ -117,7 +117,8 @@ def save_ckpt(
         checkpoint["scheduler"] = scheduler.state_dict()
     torch.save(checkpoint, checkpoint_path)
     # save backup
-    backup_path = os.path.join(work_dir, "checkpoint_{}.pth".format(epoch + 1))
-    torch.save(checkpoint, backup_path)
+    if epoch % 10 == 0:
+        backup_path = os.path.join(work_dir, f"checkpoint_{epoch + 1}.pth")
+        torch.save(checkpoint, backup_path)
     # logger.info("saved checkpoint to '{}'".format(checkpoint_path))
     return True

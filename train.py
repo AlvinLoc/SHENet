@@ -123,7 +123,9 @@ def train(model, resume_ckpt_path=None):
         model.train()
 
         all_trajs = []
-        for cnt, (input_root, target, scale, meta, raw_img) in enumerate(data_loader):
+        for cnt, (input_root, target, scale, meta, raw_img, sample_hash) in enumerate(
+            data_loader
+        ):
             if args.save_trajectories:
                 trajs = [
                     input_root[i].cpu().numpy() for i in range(input_root.shape[0])
@@ -169,7 +171,7 @@ def train(model, resume_ckpt_path=None):
         if args.save_trajectories:
             logger.info("saving trajectories...")
             traj_to_save = [{"root": i} for i in all_trajs]
-            torch.save(traj_to_save, "./trajs.pt")
+            torch.save(traj_to_save, "data/trajs.pt")
             logger.critical("trajectories saved! exit...")
             exit(0)
 
@@ -182,9 +184,14 @@ def train(model, resume_ckpt_path=None):
         with torch.no_grad():
             running_loss = 0
             n = 0
-            for cnt, (input_root, target, scale, meta, raw_img) in enumerate(
-                vald_loader
-            ):
+            for cnt, (
+                input_root,
+                target,
+                scale,
+                meta,
+                raw_img,
+                sample_hash,
+            ) in enumerate(vald_loader):
                 batch_dim = input_root.shape[0]
                 n += batch_dim
                 input_root = input_root.float().cuda()
@@ -195,7 +202,7 @@ def train(model, resume_ckpt_path=None):
 
                 preds = model(input_root[:, : args.input_n], raw_img)
 
-                loss, _ = criterion(preds, input_root, target, False)
+                loss, _, _ = criterion(preds, input_root, target, False)
 
                 if cnt % 500 == 0:
                     logger.info(

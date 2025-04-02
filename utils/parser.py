@@ -107,9 +107,9 @@ parser.add_argument(
 parser.add_argument(
     "--n_epochs", type=int, default=50, help="number of epochs to train"
 )
-parser.add_argument("--batch_size", type=int, default=32, help="batch size")
+parser.add_argument("--batch_size", type=int, default=48, help="batch size")
 parser.add_argument(
-    "--batch_size_test", type=int, default=64, help="batch size for the test set"
+    "--batch_size_test", type=int, default=128, help="batch size for the test set"
 )
 parser.add_argument(
     "--lr", type=float, default=0.005, help="Learning rate of the optimizer"
@@ -120,7 +120,7 @@ parser.add_argument(
 parser.add_argument(
     "--milestones",
     type=list,
-    default=[15, 30],
+    default=[15, 30, 100, 350],
     help="the epochs after which the learning rate is adjusted by gamma",
 )
 parser.add_argument(

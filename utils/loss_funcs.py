@@ -35,7 +35,7 @@ class CurveLoss(nn.Module):
         self.max_memory_size = len(self.memory_curves) + max_extra_curves
         self.memory_uses = defaultdict(int)
         self.invalid_curve = self.memory_curves[0] + 1e9
-        self.anchor_based = True
+        self.anchor_based = False
 
     def write_memory(self, path):
         self.memory_curves = torch.load(path)
@@ -184,6 +184,7 @@ class CurveLoss(nn.Module):
 
         true_index = torch.zeros(batch_size)
         true_preds = target.clone()
+        anchor_trajs = torch.zeros_like(target)
         TRAIN_WITH_VIS = False
         nrows = 4
         ncols = 8
@@ -202,10 +203,11 @@ class CurveLoss(nn.Module):
                 true_preds[idx, :10] = preds[idx, :10]
                 pred = preds[idx, 10:]
                 if searched_curve.shape[0] > 10:
-                    searched_curve = self.get_pred_traj_with_anchor(
+                    anchor_traj = self.get_pred_traj_with_anchor(
                         searched_curve, preds[idx]
                     )
-                    pred = searched_curve[10:] + preds[idx, 10:]
+                    anchor_trajs[idx] = anchor_traj
+                    pred = anchor_traj[10:] + preds[idx, 10:]
                 true_preds[idx, 10:] = pred
                 loss = torch.sqrt(self.criterion(pred, target[idx, 10:]))
                 # loss use for others without search
@@ -278,7 +280,7 @@ class CurveLoss(nn.Module):
             fig.savefig(f"output/vis/{time_str}_{idx}.png")
             plt.close(fig)
 
-        return batch_losses.mean(), true_preds
+        return batch_losses.mean(), true_preds, anchor_trajs
 
 
 class ClassificationLoss(nn.Module):
