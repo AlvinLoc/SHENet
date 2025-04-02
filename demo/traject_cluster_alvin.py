@@ -90,6 +90,7 @@ def evaluate(trajectories):
 from sklearn.cluster import DBSCAN
 from sklearn.cluster import OPTICS
 
+
 def plot(trajectories, hashes):
     file_path = "./"
     file = open(f"{file_path}/output/mot15/distances/distMatrices.pickle", "rb")
@@ -137,10 +138,10 @@ def d_cluster():
     #                                                load=False)
 
 
-
 import numpy as np
 from sklearn.cluster import AgglomerativeClustering
 from scipy.spatial.distance import euclidean
+
 
 def calc_angle_difference(traj1, traj2):
     """
@@ -165,11 +166,13 @@ def calc_angle_difference(traj1, traj2):
     angle = np.arccos(np.clip(cos_angle, -1, 1))
     return angle
 
+
 def angle_difference(traj1, traj2):
     assert len(traj1) == len(traj2), "Trajectories must have the same length"
     diff1 = calc_angle_difference(traj1, traj2)
-    diff2 = calc_angle_difference(traj1[:len(traj1) // 2], traj2[:len(traj2) // 2])
+    diff2 = calc_angle_difference(traj1[: len(traj1) // 2], traj2[: len(traj2) // 2])
     return max(diff1, diff2)
+
 
 def custom_distance(traj1, traj2, angle_threshold=np.pi / 360.0 * 5.0):
     """
@@ -198,6 +201,7 @@ def custom_distance(traj1, traj2, angle_threshold=np.pi / 360.0 * 5.0):
         return spatial_distance * 2.0
     return spatial_distance
 
+
 def cluster_trajectories(trajectories, angle_threshold=np.pi / 360.0 * 5.0):
     """
     将输入的轨迹点聚类成原来数量的 1/4，并返回每个簇的代表轨迹
@@ -214,14 +218,16 @@ def cluster_trajectories(trajectories, angle_threshold=np.pi / 360.0 * 5.0):
             dist = custom_distance(trajectories[i], trajectories[j], angle_threshold)
             distance_matrix[i, j] = dist
             distance_matrix[j, i] = dist
-    
+
     # 处理距离矩阵中的无穷大值
     max_finite_distance = np.max(distance_matrix[np.isfinite(distance_matrix)])
     large_value = max_finite_distance * 10  # 取一个足够大的有限值
     distance_matrix[np.isinf(distance_matrix)] = large_value
 
     # 创建 AgglomerativeClustering 模型
-    model = AgglomerativeClustering(n_clusters=n_clusters, affinity='precomputed', linkage='complete')
+    model = AgglomerativeClustering(
+        n_clusters=n_clusters, affinity="precomputed", linkage="complete"
+    )
     # 进行聚类
     labels = model.fit_predict(distance_matrix)
     # 初始化代表轨迹列表

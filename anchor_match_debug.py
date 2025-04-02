@@ -40,7 +40,7 @@ def set_random_seed(seed: int):
 device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
 print("Using device: %s" % device)
 
-model = SHENet(args, "data/trajectoryAfterCluster.pickle")
+model = SHENet(args)
 # model = torch.nn.DataParallel(model, device_ids=[0, 1, 2]).to(device)
 model = model.to(device)
 
@@ -176,7 +176,6 @@ def train():
 
 
 def test(ckpt_path):
-    hash2cluster = pickle.load(open("data/sampleHash2Cluster.pickle", "rb"))
     model.load_state_dict(load_model_from_ckpt(ckpt_path))
     model.eval()
 
@@ -215,9 +214,7 @@ def test(ckpt_path):
     print("static memory size: ", static_memory.shape)
     seq_len = args.input_n + args.output_n
 
-    for cnt, (input_root, target, scale, meta, raw_img, hash) in tqdm(
-        enumerate(test_loader)
-    ):
+    for cnt, (input_root, target, scale, meta, raw_img) in tqdm(enumerate(test_loader)):
         with torch.no_grad():
             batch_dim = input_root.shape[0]
             input_root = input_root.float().cuda()
@@ -225,16 +222,7 @@ def test(ckpt_path):
 
             raw_img = raw_img.cuda()
 
-            preds, logits = model(input_root[:, : args.input_n], raw_img)
-
-            gt_anchor_indices = [hash2cluster.get(h) for h in hash]
-            gt_anchors = []
-            for i in range(len(gt_anchor_indices)):
-                if gt_anchor_indices[i] is not None:
-                    preds[i] = static_memory[gt_anchor_indices[i]].cuda()
-                else:
-                    preds[i] = torch.zeros_like(preds[i]).cuda()
-
+            preds = model(input_root[:, : args.input_n], raw_img)
             # for concta and cross modal
             # loss,_= curve_loss(preds,input_root,target,False)
             # for search
@@ -304,4 +292,4 @@ def test(ckpt_path):
 if __name__ == "__main__":
     # test("data/SHENet/pretrained/full_model.pth")
     # test("output/2025-03-21-22-54-48/checkpoint_50.pth")
-    test("output/2025-03-30-10-41-44/checkpoint_71.pth")
+    test("output/2025-03-27-00-48-28/checkpoint_100.pth")

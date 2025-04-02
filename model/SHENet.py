@@ -41,7 +41,7 @@ def conv3x3(in_planes, out_planes, stride=1, groups=1, dilation=1):
 
 
 class SHENet(nn.Module):
-    def __init__(self, opt):
+    def __init__(self, opt, file_path):
         """
         Construct a MulT model.
         """
@@ -94,9 +94,18 @@ class SHENet(nn.Module):
 
         self.combined_dim = 2 * self.embed_dim
 
-        self.proj1 = nn.Linear(self.combined_dim, self.combined_dim)
-        self.proj2 = nn.Linear(self.combined_dim, self.combined_dim)
-        self.out_layer = nn.Linear(self.combined_dim, self.output_dim)
+        self.proj1 = nn.Linear(self.combined_dim + 120, self.combined_dim + 120)
+        self.proj2 = nn.Linear(self.combined_dim + 120, self.combined_dim + 120)
+        self.out_layer = nn.Linear(self.combined_dim + 120, self.output_dim)
+
+        memory_fut = self.load_static_memory(file_path)
+        self.anchor_traj_candidates = torch.from_numpy(memory_fut).float().cuda()
+        self.anchor_selector = nn.Sequential(
+            nn.Linear(self.combined_dim, self.combined_dim),
+            nn.ReLU(),
+            nn.Linear(self.combined_dim, self.anchor_traj_candidates.shape[0]),
+            nn.Softmax(dim=1),
+        )
 
     def load_static_memory(self, file_path):
         if file_path.endswith(".pickle"):
@@ -209,17 +218,24 @@ class SHENet(nn.Module):
 
         last_dec_fea = torch.cat([last_dec_tra, last_dec_scene], dim=1)
 
+        anchor_traj_candidates_logit = self.anchor_selector(last_dec_fea)
+        selected_anchor_trajs = self.anchor_traj_candidates[
+            anchor_traj_candidates_logit.argmax(dim=1)
+        ]
+
+        last_dec_fea_with_anchor = torch.cat(
+            [last_dec_fea, selected_anchor_trajs.reshape(batch_size, -1)], dim=1
+        )
         pred_proj = self.proj2(
             F.dropout(
-                F.relu(self.proj1(last_dec_fea)),
+                F.relu(self.proj1(last_dec_fea_with_anchor)),
                 p=self.out_dropout,
                 training=self.training,
             )
         )
-        pred_proj += last_dec_fea  # (N,768)
+        pred_proj += last_dec_fea_with_anchor  # (N,768)
         decoder_output = self.out_layer(pred_proj)
-        outputs = decoder_output.reshape(batch_size, -1, 2)
-
-        outputs = torch.cat([x_tra, outputs], dim=1)
-
-        return outputs
+        offsets = decoder_output.reshape(batch_size, -1, 2)
+        pred_trajs = selected_anchor_trajs
+        pred_trajs[:, 10:] = pred_trajs[:, 10:] + offsets
+        return pred_trajs, anchor_traj_candidates_logit

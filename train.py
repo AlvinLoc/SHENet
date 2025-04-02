@@ -52,6 +52,7 @@ init_logger(work_dir)
 
 
 def train(model, resume_ckpt_path=None):
+    hash2cluster = pickle.load(open("data/sampleHash2Cluster.pickle", "rb"))
     wandb.init(
         project="SHENet",
         config={
@@ -112,9 +113,8 @@ def train(model, resume_ckpt_path=None):
     wandb.watch(model, log="all", log_freq=1)
 
     # 定义参数
-    static_memory = model.load_static_memory(
-        "/home/alvin.gao/SHENet/data/SHENet/pretrained/FinalBank.pt"
-    )
+    static_memory = model.load_static_memory("data/trajectoryAfterCluster.pickle")
+    cluster_size = static_memory.shape[0]
     criterion = CurveLoss(static_memory, args.memory_size)
 
     for epoch in range(start_epoch, args.n_epochs):
@@ -139,20 +139,42 @@ def train(model, resume_ckpt_path=None):
             scale = scale.cuda()
             raw_img = raw_img.cuda()
 
-            preds = model(input_root[:, : args.input_n], raw_img)
+            preds, logits = model(input_root[:, : args.input_n], raw_img)
 
-            loss, _ = criterion(preds, input_root, target, False)
+            loss, _, _ = criterion(preds, input_root, target, False)
+
+            # 生成有效性掩码和调整后的类别索引
+            valid_mask = []
+            cls_gt = torch.zeros(args.batch_size, cluster_size).cuda()
+            for h in sample_hash:
+                if h in hash2cluster:  # 有效的哈希值
+                    cls_gt[hash2cluster[h]] = 1.0
+                    valid_mask.append(1.0)
+                else:  # 无效的哈希值
+                    logger.warning(f"Invalid hash value: {h}")
+                    valid_mask.append(0.0)
+
+            valid_mask = torch.tensor(valid_mask, device=input_root.device)
+            # 修改损失计算部分，添加掩码处理
+            cls_loss = torch.nn.functional.binary_cross_entropy_with_logits(
+                logits, cls_gt, reduction="none"
+            ).sum(dim=1)
+
+            # 只计算有效样本的损失 (valid_mask作为权重)
+            cls_loss = (cls_loss * valid_mask).sum() / (valid_mask.sum() + 1e-8)
 
             process = psutil.Process(os.getpid())
             cpu_memory = process.memory_info().rss / (1024.0 * 1024.0)
             iteration = epoch * dataset_length + cnt
             anchor_trajs_count = len(criterion.memory_curves)
             logger.info(
-                f"iter: {iteration} \t \t [{epoch + 1}, {cnt + 1}]  training loss: {loss.item()}, anchor_trajs_count: {anchor_trajs_count}, mem: {cpu_memory:.2f}MB"
+                f"iter: {iteration} \t \t [{epoch + 1}, {cnt + 1}]  pred loss: {loss.item()}, cls_loss: {cls_loss.item()}, anchor_trajs_count: {anchor_trajs_count}, mem: {cpu_memory:.2f}MB"
             )
             wandb.log(
                 {
-                    "train_loss": loss.item(),
+                    "pred_loss": loss.item(),
+                    "cls_loss": cls_loss.item(),
+                    "total_loss": loss.item() + cls_loss.item(),
                     "memory": cpu_memory,
                     "anchor_trajs": anchor_trajs_count,
                     "epoch": epoch,
@@ -162,6 +184,8 @@ def train(model, resume_ckpt_path=None):
 
             optimizer.zero_grad()
 
+            # 合并两个loss后再反向传播
+            loss = loss + cls_loss
             loss.backward()
 
             optimizer.step()
@@ -200,7 +224,7 @@ def train(model, resume_ckpt_path=None):
 
                 raw_img = raw_img.cuda()
 
-                preds = model(input_root[:, : args.input_n], raw_img)
+                preds, _ = model(input_root[:, : args.input_n], raw_img)
 
                 loss, _, _ = criterion(preds, input_root, target, False)
 
@@ -243,9 +267,10 @@ def train(model, resume_ckpt_path=None):
 
 
 if __name__ == "__main__":
-    model = SHENet(args)
+    model = SHENet(args, "data/trajectoryAfterCluster.pickle")
     model = model.cuda()
     resume_model_path = None
+    # resume_model_path = "output/2025-03-27-00-48-28/checkpoint_100.pth"
     logger.info(
         "total number of parameters of the network is: "
         + str(sum(p.numel() for p in model.parameters() if p.requires_grad))
