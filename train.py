@@ -132,6 +132,7 @@ def train(model, resume_ckpt_path=None):
         model.train()
 
         all_trajs = []
+        all_hashes = []
         for cnt, (input_root, target, scale, meta, raw_img, sample_hash) in enumerate(
             data_loader
         ):
@@ -140,6 +141,7 @@ def train(model, resume_ckpt_path=None):
                     input_root[i].cpu().numpy() for i in range(input_root.shape[0])
                 ]
                 all_trajs.extend(trajs)
+                all_hashes.extend(sample_hash)
                 continue
             batch_dim = input_root.shape[0]
             n += batch_dim
@@ -179,7 +181,9 @@ def train(model, resume_ckpt_path=None):
 
         if args.save_trajectories:
             logger.info("saving trajectories...")
-            traj_to_save = [{"root": i} for i in all_trajs]
+            traj_to_save = [
+                {"root": i, "hash": j} for i, j in zip(all_trajs, all_hashes)
+            ]
             torch.save(traj_to_save, "data/trajs.pt")
             logger.critical("trajectories saved! exit...")
             exit(0)

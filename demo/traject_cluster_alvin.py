@@ -21,7 +21,6 @@ import pudb
 
 
 def load_data():
-    # file_path = "./data/rough_trajectories.pt"
     file_path = "./data/trajs.pt"
     data = torch.load(file_path)
     root = []
@@ -30,7 +29,7 @@ def load_data():
         tra = sample["root"][:60, :]
         tra = tra - tra[0, :]
         root.append(tra)
-        paths.append(sample["img_path"])
+        paths.append(sample["hash"])
     print("trajectorres number: ", len(root))
     return root, paths
 
@@ -255,14 +254,12 @@ if __name__ == "__main__":
     # 使用 zip 函数简化 hash2cluster 的创建过程
     hash2cluster = {hash_val: label for hash_val, label in zip(hashes, labels)}
 
-    # 移除 f-string 占位符问题
-    file_path_1 = "output/mot15/distances/trajectoryAfterCluster.pickle"
+    file_path_1 = "data/trajectoryAfterCluster.pickle"
     with open(file_path_1, "wb") as pickle_out:
         print(f"len(clusterTra): {len(representative_trajectories)}")
         pickle.dump(representative_trajectories, pickle_out)
 
-    # 移除 f-string 占位符问题
-    file_path_2 = "output/mot15/distances/sampleHash2Cluster.pickle"
+    file_path_2 = "data/sampleHash2Cluster.pickle"
     with open(file_path_2, "wb") as pickle_out:
         print(f"len(sampleHash2Cluster): {len(hash2cluster)}")
         pickle.dump(hash2cluster, pickle_out)
