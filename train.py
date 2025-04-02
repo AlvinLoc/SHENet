@@ -124,7 +124,7 @@ def train(model, resume_ckpt_path=None):
         static_memory = model.load_static_memory(memory_path)
     else:
         logger.info(f"Initializing static memory from checkpoint")
-    criterion = CurveLoss(static_memory, args.memory_size, use_anchor=True)
+    criterion = CurveLoss(static_memory, args.memory_size, use_anchor=False)
 
     for epoch in range(start_epoch, args.n_epochs):
         running_loss = 0

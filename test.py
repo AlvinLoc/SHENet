@@ -97,7 +97,7 @@ def train():
     static_memory = model.module.load_static_memory(work_dir)
 
     print("static memory size (before): ", len(static_memory))
-    criterion = CurveLoss(static_memory, args.memory_size, use_anchor=True)
+    criterion = CurveLoss(static_memory, args.memory_size, use_anchor=False)
 
     for epoch in range(args.n_epochs):
         running_loss = 0
@@ -209,7 +209,7 @@ def test(ckpt_path):
     static_memory = model.load_static_memory(
         "/home/alvin.gao/SHENet/data/SHENet/pretrained/FinalBank.pt"
     )
-    curve_loss = CurveLoss(static_memory, args.memory_size, use_anchor=True)
+    curve_loss = CurveLoss(static_memory, args.memory_size, use_anchor=False)
     # dynamic_memory = curve_loss.write_memory(work_dir + "mem_curves_full.pt")
     print("static memory size: ", static_memory.shape)
     seq_len = args.input_n + args.output_n
