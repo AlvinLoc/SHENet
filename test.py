@@ -214,8 +214,8 @@ def test(ckpt_path):
     # dynamic_memory = curve_loss.write_memory(work_dir + "mem_curves_full.pt")
     print("static memory size: ", static_memory.shape)
     seq_len = args.input_n + args.output_n
-
-    for cnt, (input_root, target, scale, meta, raw_img, hash) in tqdm(
+    cluster_size = len(model.anchor_traj_candidates)
+    for cnt, (input_root, target, scale, meta, raw_img, sample_hash) in tqdm(
         enumerate(test_loader)
     ):
         with torch.no_grad():
@@ -227,31 +227,26 @@ def test(ckpt_path):
 
             preds, logits = model(input_root[:, : args.input_n], raw_img)
 
-            gt_anchor_indices = [hash2cluster.get(h) for h in hash]
-            gt_anchors = []
-            for i in range(len(gt_anchor_indices)):
-                if gt_anchor_indices[i] is not None:
-                    preds[i] = static_memory[gt_anchor_indices[i]].cuda()
-                else:
-                    preds[i] = torch.zeros_like(preds[i]).cuda()
-
-            # for concta and cross modal
-            # loss,_= curve_loss(preds,input_root,target,False)
-            # for search
             loss, preds, anchor_trajs = curve_loss(preds, input_root, target, False)
 
+            # 生成有效性掩码和调整后的类别索引
+            valid_mask = [False for _ in range(len(input_root))]
+            cls_gt = torch.zeros(len(input_root), cluster_size).cuda()
+            for batch_idx, h in enumerate(sample_hash):
+                if h in hash2cluster:  # 有效的哈希值
+                    cls_gt[batch_idx, hash2cluster[h]] = 1.0
+                    # hack for test on train
+                    preds[batch_idx] = model.anchor_traj_candidates[
+                        hash2cluster[h]
+                    ].cuda()
+                    valid_mask[batch_idx] = True
+                else:  # 无效的哈希值
+                    logger.warning(f"Invalid hash value: {h}")
+
             running_loss += loss * batch_dim
-            # gts = (
-            #     input_root.cpu().data.numpy()
-            #     + target.unsqueeze(1).expand(-1, seq_len, -1).cpu().data.numpy()
-            # )
-            # gts = input_root.cpu().data.numpy()
+
             gts = target.cpu().data.numpy()
-            # preds = (
-            #     preds.cpu().data.numpy()
-            #     + target.unsqueeze(1).expand(-1, seq_len, -1).cpu().data.numpy()
-            # )
-            # preds = preds.cpu().data.numpy()
+
             preds = preds + target[:, :1, :].expand(-1, seq_len, -1)
             preds = preds.cpu().data.numpy()
 
@@ -304,4 +299,4 @@ def test(ckpt_path):
 if __name__ == "__main__":
     # test("data/SHENet/pretrained/full_model.pth")
     # test("output/2025-03-21-22-54-48/checkpoint_50.pth")
-    test("output/2025-03-30-10-41-44/checkpoint_71.pth")
+    test("output/2025-04-02-14-46-26/checkpoint_1.pth")

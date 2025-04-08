@@ -146,5 +146,12 @@ parser.add_argument(
     "--save_trajectories", type=bool, default=False, help="save trajectories"
 )
 
+parser.add_argument(
+    "--geom_weight", type=float, default=1.0, help="weight of the offset loss"
+)
+
+parser.add_argument(
+    "--cls_weight", type=float, default=20.0, help="weight of the classifier loss"
+)
 
 args = parser.parse_args()

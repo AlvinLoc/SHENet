@@ -19,6 +19,7 @@ from utils.data_utils import define_actions
 from utils.parser import args
 from utils.logger import logger, init_logger
 from utils.model_utils import load_ckpt, save_ckpt
+import torch.nn.functional as F
 import datetime
 from tqdm import tqdm
 import pudb
@@ -155,26 +156,24 @@ def train(model, resume_ckpt_path=None):
             preds, logits = model(input_root[:, : args.input_n], raw_img)
 
             loss, _, _ = criterion(preds, input_root, target, False)
+            loss = loss * args.geom_weight
 
             # 生成有效性掩码和调整后的类别索引
-            valid_mask = []
-            cls_gt = torch.zeros(args.batch_size, cluster_size).cuda()
-            for h in sample_hash:
-                if h in hash2cluster:  # 有效的哈希值
-                    cls_gt[hash2cluster[h]] = 1.0
-                    valid_mask.append(1.0)
-                else:  # 无效的哈希值
-                    logger.warning(f"Invalid hash value: {h}")
-                    valid_mask.append(0.0)
-
+            cls_gt = [hash2cluster.get(h, -1) for h in sample_hash]
+            cls_gt = torch.tensor(cls_gt, device=input_root.device)
+            valid_mask = cls_gt >= 0  # 只计算有效的类别索引
             valid_mask = torch.tensor(valid_mask, device=input_root.device)
-            # 修改损失计算部分，添加掩码处理
-            cls_loss = torch.nn.functional.binary_cross_entropy_with_logits(
-                logits, cls_gt, reduction="none"
-            ).sum(dim=1)
 
-            # 只计算有效样本的损失 (valid_mask作为权重)
-            cls_loss = (cls_loss * valid_mask).sum() / (valid_mask.sum() + 1e-8)
+            valid_logits = logits[valid_mask]
+            valid_cls_gt = cls_gt[valid_mask]
+            # for unit test
+            # valid_logits = F.one_hot(cls_gt[valid_mask], num_classes=cluster_size).float()
+            # unit_cls_loss = -valid_logits[torch.arange(valid_logits.size(0)), cls_gt[valid_mask]].log().mean()
+
+            # 修改损失计算部分，添加掩码处理
+            cls_loss = F.cross_entropy(
+                valid_logits, valid_cls_gt, reduction="none"
+            ).mean() * args.cls_weight
 
             process = psutil.Process(os.getpid())
             cpu_memory = process.memory_info().rss / (1024.0 * 1024.0)
@@ -197,8 +196,7 @@ def train(model, resume_ckpt_path=None):
 
             optimizer.zero_grad()
 
-            # 合并两个loss后再反向传播
-            loss = loss + cls_loss
+            loss += cls_loss
             loss.backward()
 
             optimizer.step()
